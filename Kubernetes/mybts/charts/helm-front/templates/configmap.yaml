@@ -1,0 +1,16 @@
+{{ $NAMESPACE := .Release.Namespace }}
+{{ $service_name := .Release.Name }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ include "front.fullname" . }}-cfg"
+  namespace: {{ $NAMESPACE }}
+data:
+    REACT_APP_CLIENT_ID: "461536394247-4csspqfng903p10nm444i4qoiemjfp18.apps.googleusercontent.com"
+    REACT_APP_BACKEND: "http://{{ $service_name }}-front"
+    REACT_APP_PORT: "8080"
+    REACT_APP_BACKEND_VERSION: "/api/V2"
+    REACT_APP_S3_FOLDER: "dev"
+    REACT_APP_S3_BUCKET: ""
+    REACT_APP_S3_ROOT: "https://mybts-s3.s3.amazonaws.com"
