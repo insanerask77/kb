@@ -1,0 +1,107 @@
+
+#  From: GitLab HA Scaling Runner Vending Machine for AWS EC2 ASG (https://gitlab.com/guided-explorations/aws/gitlab-runner-autoscaling-aws-asg/)
+#  EC2 Image Builder 'Component' for Windows Shell GitLab Runner
+#   Be sure to configure AWS built in component 'chocolatey' and have it run before this one.
+#   Be sure to configure the AWS prepared component 'PowerShell Core' so that GitLab runner can run PowerShell scripts in .gitlab-ci.yml
+# Use a large disk volume because Visual Studio is large (probably 300-500GB) the default disk size for 
+#   Windows is 30GB and Visual Studio installer does not properly bubble up the error that there is 
+#   insufficient disk space to the chocolately log. Instead chocolatey errors with an exit code of '1'
+# This component does not install GitLab runner because you always want the latest and it is very quick to install
+#   The companion automation ASG automation 
+#   Dynamically installs the runner due to those two reasons.
+
+name: GitLab Runner Windows Shell Runner Just like GitLab.com Shared Runners
+description: GitLab Runner Windows Shell Runner Just like GitLab.com Shared Runners
+schemaVersion: 1.0
+
+phases:
+  - name: build
+    steps:
+      - name: BuildEnvironment
+        action: ExecutePowerShell
+        inputs:
+          commands:
+            - |
+              Function logit ($Msg, $MsgType='Information', $ID='1') {
+                If ($script:PSCommandPath -ne '' ) { $SourcePathName = $script:PSCommandPath ; $SourceName = split-path -leaf $SourcePathName } else { $SourceName = "Automation Code"; $SourcePathName = "Unknown" }
+                Write-Host "[$(Get-date -format 'yyyy-MM-dd HH:mm:ss zzz')] $MsgType : From: $SourcePathName : $Msg"
+                $applog = New-Object -TypeName System.Diagnostics.EventLog -argumentlist Application
+                $applog.Source="$SourceName"
+                $applog.WriteEntry("From: $SourcePathName : $Msg", $MsgType, $ID)
+              }
+              #Must have already installed chocolatey for this script to work.
+              if (-not (Get-Command cinst -ErrorAction SilentlyContinue)) { echo "Chocolatey must be installed before this component runs"; exit 5 }
+              logit "`n`nInstalling requirements for all GitLab Runners"
+              choco install -y git --version=2.30.0 -params '"/GitOnlyOnPath"' -force
+              #Enable using git in this process
+              $gitpath = 'C:\Program Files\git\cmd'
+              $CurrentProcessPath = [Environment]::GetEnvironmentVariable("Path", "Process")
+              if (!($CurrentProcessPath -ilike "*\git\cmd*"))
+              {
+                [Environment]::SetEnvironmentVariable("Path", $CurrentProcessPath + ";$gitpath", "Process")
+              }
+              choco install -y powershell-core
+            - |
+              logit "`n`nInstalling requirements this specific runner"
+              choco install -y jq curl wget nuget.commandline 7zip
+              choco install -y golang nodejs openjdk 
+              choco install -y visualstudio2019buildtools --package-parameters " --allWorkloads --includeRecommended --includeOptional --passive --locale en-US --noUpdateInstaller"
+              choco install -y visualstudio2017-workload-webbuildtools
+              choco install -y visualstudio2017-workload-netcorebuildtools
+              choco install -y visualstudio2017-workload-nodebuildtools
+              choco install -y visualstudio2017-workload-vctools
+              choco install -y visualstudio2017-workload-manageddesktopbuildtools
+              choco install -y visualstudio2019-workload-xamarinbuildtools
+              choco install -y dotnetfx dotnetcore-sdk
+              logit "`n`nInstalling Docker..."
+              Install-PackageProvider -Name NuGet -Force
+              Install-Module -Name DockerMsftProvider -Repository PSGallery -Force -Confirm:$false
+              Install-Package -Name docker -ProviderName DockerMsftProvider -Force
+              netsh netkvm setparam 0 *RscIPv4 0
+              reg add HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters/v DisabledComponents /t REG_DWORD /d 0x0 /f
+              choco install -y docker-compose
+              logit "`n`nInstalling vcpkg..."
+              $VCPROOT="$env:PROGRAMDATA\vcpkg"
+              git clone https://github.com/microsoft/vcpkg.git $VCPROOT
+              cd $VCPROOT
+              git checkout 2019.12
+              . $VCPROOT\bootstrap-vcpkg.bat
+              . $VCPROOT\vcpkg integrate install
+              $PathToAdd="$VCPROOT"; $Scope='Machine'; $PathVariable='PATH'
+              $ExistingPathArray = @([Environment]::GetEnvironmentVariable("$PathVariable","$Scope").split(';'))
+              if (($ExistingPathArray -inotcontains $PathToAdd) -AND ($ExistingPathArray -inotcontains "$PathToAdd\"))
+              {
+                $Newpath = $ExistingPathArray + @("$PathToAdd")
+                $AssembledNewPath = ($newpath -join(';')).trimend(';')
+                [Environment]::SetEnvironmentVariable("$PathVariable",$AssembledNewPath,"$Scope")
+              }
+
+#Create and schedule this as a Test component. In addition to what is in the validate script, this script is checking for powershell core (pwsh) which should have been installed by the
+# standard AWS component in the recipe
+name: TEST GitLab Runner Windows Shell Runner Just like GitLab.com Shared Runners
+description: TEST GitLab Runner Windows Shell Runner Just like GitLab.com Shared Runners
+schemaVersion: 1.0
+
+phases:
+  - name: test
+    steps:
+      - name: NET4BuildAgent
+        action: ExecutePowerShell
+        inputs:
+          commands:
+            - |
+              Function logit ($Msg, $MsgType='Information', $ID='1') {
+                If ($script:PSCommandPath -ne '' ) { $SourcePathName = $script:PSCommandPath ; $SourceName = split-path -leaf $SourcePathName } else { $SourceName = "Automation Code"; $SourcePathName = "Unknown" }
+                Write-Host "[$(Get-date -format 'yyyy-MM-dd HH:mm:ss zzz')] $MsgType : From: $SourcePathName : $Msg"
+                $applog = New-Object -TypeName System.Diagnostics.EventLog -argumentlist Application
+                $applog.Source="$SourceName"
+                $applog.WriteEntry("From: $SourcePathName : $Msg", $MsgType, $ID)
+              }
+              #Requirements for all GitLab Windows Runners
+              $cmdchecks=@('git','pwsh','jq','dotnet','go','npm','vcpkg','node'); 
+              $cmdchecks | foreach { if (Get-Command $psitem -ErrorAction SilentlyContinue) {logit "SUCCEEDED check: $psitem $($(get-command $psitem).version)"} else {logit "FAILED check: $psitem"; $fails++ }}; if ($fails -gt 0) {exit $fails} else {exit 0}
+            
+# Troubleshooting:
+# Summary of all Chocolatey Installs: get-content $env:ProgramData\chocolatey\logs\chocolatey.log | sls "The install of "
+# Location of logs from installers within chocolatey: dir $env:windir\temp\chocolatey\
+# Find errors in all vs logs: Select-String -Path $env:windir\temp\chocolatey\*.log -Pattern 'Error'

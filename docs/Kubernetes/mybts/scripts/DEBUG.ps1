@@ -1,0 +1,1 @@
+helm install mybts --create-namespace --namespace mybts-ns --dry-run --debug ../. > ../logs/log.yaml

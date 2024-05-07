@@ -1,0 +1,26 @@
+version: '3.6'
+services:
+  web:
+    image: 'gitlab/gitlab-ce:latest'
+    restart: always
+    hostname: 'gitlab.madolell.com'
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'https://gitlab.madolell.com'
+        registry_external_url 'https://registry.gitlab.madolell.com'
+        registry['enable'] = true
+        # Add any other gitlab.rb configuration here, each on its own line
+    ports:
+      - '8080:80'
+      - '4433:443'
+      - '22:22'
+    volumes:
+      - '$GITLAB_HOME/config:/etc/gitlab'
+      - '$GITLAB_HOME/logs:/var/log/gitlab'
+      - '$GITLAB_HOME/data:/var/opt/gitlab'
+    shm_size: '256m'
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M

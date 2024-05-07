@@ -1,0 +1,1 @@
+helm upgrade mybts --create-namespace --namespace mybts-ns ../.

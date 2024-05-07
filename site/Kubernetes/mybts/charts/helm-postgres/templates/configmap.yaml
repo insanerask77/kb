@@ -1,0 +1,11 @@
+{{ $NAMESPACE :=  .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ include "postgres.fullname" . }}-cfg"
+  namespace: {{ $NAMESPACE }}
+data:
+  POSTGRES_USER: "postgres"
+  POSTGRES_PASSWORD: "postgres"
+  PGDATA: "/data/postgres"

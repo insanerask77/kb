@@ -1,0 +1,1591 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Creates a GitLab Runner Scaling Group / Cluster.
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Template Information"
+        Parameters:
+          - 1AAASourceProject
+          - 1AAAATemplateVersion
+      -
+        Label:
+          default: "Runner Base Platform"
+        Parameters:
+          - 1OSInstanceOSPlatform
+          - 1OSInstanceLinuxArch
+          - 1OSPeggedAMIID
+          - 9AWSRetrieveLatestAWSOSAmiIdFromSSM
+      -
+        Label:
+          default: "GitLab Instance Registration Details"
+        Parameters:
+          - 3GITLABRunnerInstanceURL
+          - 3GITLABRunnerRegTokenList
+      -
+        Label:
+          default: "GitLab Runner Configuration Details"
+        Parameters:
+          - 3GITLABRunnerVersion
+          - 3GITLABRunnerTagList
+          - 3INSTConfigurationScript
+          - 3GITLABRunnerS3CacheBucket
+          - 3GITLABRunnerConcurrentJobs
+      -
+        Label:
+          default: "Scaling Group / Cluster Size, HA Type, Instance Type, VPC Location, Security and Scheduling"
+        Parameters:
+          - 4ASGDesiredCapacity
+          - 3GITLABRunnerConcurrentJobs
+          - 3GITLABRunnerS3CacheBucket
+          - 9AWSSpecifiedIAMRoleNAME
+          - 4ASGSpecifyVPC
+          - 4ASGSpecifySubnets
+          - 4ASGSpecifySecurityGroups
+          - 4ASGScheduledShutdownCron
+          - 4ASGScheduledStartupDesiredInstances
+          - 4ASGScheduledStartupCron
+          - 5ASGInstanceType1
+          - 5ASGInstanceType2
+          - 5ASGInstanceType3
+          - 5ASGInstanceType4
+          - 3INSTEbsVolumeSize
+          - 8DBGKeypairName
+      -
+        Label:
+          default: "Scaling Group / Cluster Optional AutoScaling Parameters"
+        Parameters:
+          - 5ASGAutoScalingEnabled
+          - 5ASGAutoScalingMaxSize
+          - 5ASGAutoScalingMetricTypeToMonitor
+          - 5ASGAutoScalingSetScaleInUtilizationThreshold
+          - 5ASGAutoScalingSetScaleInUtilizationThresholdSeconds
+          - 5ASGAutoScalingSetScaleOutUtilizationThreshold
+          - 5ASGAutoScalingSetScaleOutUtilizationThresholdSeconds
+          - 5ASGSelfMonitorTerminationInterval
+      -
+        Label:
+          default: "Scaling Group / Cluster Optional Spot Configuration"
+        Parameters:
+          - 5SPOTOnDemandBaseCapacity
+          - 5SPOTOnDemandPercentageAboveBaseCapacity
+          - 5SPOTSpotAllocationStrategy
+      -
+        Label:
+          default: "Maintenance Built-In"
+        Parameters:
+          - 1OSLastManagedUpdate
+          - 1OSPatchScope
+          - 4ASGUpdateType
+    ParameterLabels:
+      1AAASourceProject:
+        default: "Location of the source for this project."
+      1AAAATemplateVersion:
+        default: "Version of this template."
+      1OSPeggedAMIID:
+        default: "Peg the AMI ID to a specific one or use the latest AWS prepared AMI?"
+      1OSInstanceOSPlatform:
+        default: "OS Platform for Runner"
+      1OSInstanceLinuxArch:
+        default: "Hardware architecture if OS Platform is Linux."
+      1OSLastManagedUpdate:
+        default: "Last time an update was forced using a CloudFormation update."
+      1OSPatchScope:
+        default: "What kind of patches should be installed?"
+      3INSTConfigurationScript:
+        default: "Pointer to script used to configure the runner on the instance."
+      3GITLABRunnerS3CacheBucket:
+        default: "S3 bucket that holds shared cache for all runner instances in this runner Scaling Group / Cluster."
+      4ASGUpdateType:
+        default: "What kind of update type should the Scaling Group / Cluster use when updating?"
+      3GITLABRunnerConcurrentJobs:
+        default: "Number of concurrent jobs / containers that can run on a single runner instance at one time."
+      3GITLABRunnerInstanceURL:
+        default: "GitLab Instance URL."
+      3GITLABRunnerRegTokenList:
+        default: "One or more runner Registration tokens from the target instance."
+      3GITLABRunnerS3CacheBucket:
+        default: "The S3 bucket that will be used for a shared runner cache."
+      3GITLABRunnerTagList:
+        default: "An optional list of additional tags for the GitLab Runner."
+      3GITLABRunnerVersion:
+        default: "Version of the GitLab runner.  Generally should match your GitLab instance."
+      9AWSRetrieveLatestAWSOSAmiIdFromSSM:
+        default: "The SSM Parameter used to lookup the latest Amazon AMI when not pegging one. The SSM parameter must point to an AMI that contains the proper OS indicated in 'OS Platform for Runner'"
+      4ASGDesiredCapacity:
+        default: "The number of instances that should be configured. Generally 1 for warm HA and 2 for hot HA."
+      4ASGUpdateType:
+        default: "The type of deployment strategy should be used when updating the Scaling Group / Cluster."
+      4ASGUpdateMinInstancesInService:
+        default: "The minimum instances that should be in service during updates."
+      4ASGUpdateMaxBatchSize:
+        default: "The maximum number of instances to process at once."
+      4ASGScheduledShutdownCron:
+        default: "Optional cron schedule for complete runner Scaling Group / Cluster shutdown."
+      4ASGScheduledStartupCron:
+        default: "Optional cron schedule for complete runner Scaling Group / Cluster startup."
+      4ASGScheduledStartupDesiredInstances:
+        default: "Number of instances to start for startup schedule."
+      4ASGSpecifyVPC:
+        default: "The VPC in the account and region should be used."
+      4ASGSpecifySubnets:
+        default: "The subnets in the specified VPC that should be used."
+      4ASGSpecifySecurityGroups:
+        default: "The security groups to be used in the ASG launch template."
+      5ASGAutoScalingEnabled:
+        default: "Whether to AutoScale the Scaling Group."
+      5ASGAutoScalingMaxSize:
+        default: "Maximum instances in the Scaling Group."
+      5ASGSelfMonitorTerminationInterval:
+        default: "Frequency in minutes for instances to poll to see whether they are being terminated."
+      5ASGAutoScalingMetricTypeToMonitor:
+        default: "What metric should be monitored for autoscaling."
+      5ASGAutoScalingSetScaleOutUtilizationThreshold:
+        default: "Scale out threshold (percent)."
+      5ASGAutoScalingSetScaleOutUtilizationThresholdSeconds:
+        default: "How long the scale out threshold should be experienced before triggering scale out."
+      5ASGAutoScalingSetScaleInUtilizationThreshold:
+        default: "Scale in threshold (percent)."
+      5ASGAutoScalingSetScaleInUtilizationThresholdSeconds:
+        default: "How long the scale in threshold should be experienced before triggering scale out."
+      5ASGInstanceType1:
+        default: "Primary instance type to be used - if available."
+      5ASGInstanceType2:
+        default: "Second priority instance type to be used - if previous priorities are exhausted. Used for Ec2 Fleet when not using spot."
+      5ASGInstanceType3:
+        default: "Third priority instance type to be used - if previous priorities are exhausted. Used for Ec2 Fleet when not using spot."
+      5ASGInstanceType4:
+        default: "Fourth priority instance type to be used - if previous priorities are exhausted. Used for Ec2 Fleet when not using spot."
+      3INSTEbsVolumeSize:
+        default: "EBS Volume size in GiB."
+      5SPOTSpotAllocationStrategy:
+        default: "Focus spot request strategy on price or lower terminations."
+      5SPOTOnDemandBaseCapacity:
+        default: "OnDemandBaseCapacity - Number of non-spot instances to always start with."
+      5SPOTOnDemandPercentageAboveBaseCapacity:
+        default: "Percentage of non-spot instances when scaling above OnDemandBaseCapacity."
+      8DBGKeypairName:
+        default: "Optional keypair name for traditional SSH access to Runner instances."
+      9AWSSpecifiedIAMRoleNAME:
+        default: "Override automatic IAM Instance Profile for a precreated one."
+      9AWSRetrieveLatestAWSOSAmiIdFromSSM:
+        default: "Which Amazon Prepared AMI to grab the latest of (SSM parameter path)."
+Parameters:
+  1AAAATemplateVersion:
+    Description: "Version of this template. Read only."
+    Type: String
+    Default: "v1.4.9-alpha14"
+    AllowedValues: [ "v1.4.9-alpha14" ]
+    ConstraintDescription: "1AAAATemplateVersion is the template version number and cannot be changed at runtime."
+  1AAASourceProject:
+    Description: >
+      Please read the readme and watch the video linked in the readme.
+      CONTRIBUTIONS / ENHANCEMENTS / BUG REPORTING: Please report bugs in the issues section of this project.
+    Type: String
+    Default: https://gitlab.com/guided-explorations/gitlab-deployment/gitlab-runner-autoscaling-aws-asg/
+    AllowedValues: [ "https://gitlab.com/guided-explorations/gitlab-deployment/gitlab-runner-autoscaling-aws-asg/" ]
+    ConstraintDescription: "1AAASourceProject is an information parameter that cannot be changed."
+  1OSPeggedAMIID:
+    Description: >
+      99% of the time you will want to leave this as "latest".  Override here if you have a dependency on a specific AMI or have prepared a custom one.
+      Can be Windows or Linux, but the value chosen for 1OSInstanceOSPlatform must match the OS platform contained in the AMI.
+      For testing pick an older one that will need a kernel patch or other reboot required patch for sure.
+      For Linux - due to optimization and AWS ECR Creds Helper, Amazon Linux 2 is assumed, but other Redhat parentage distros may work (yum packager).
+      CentOS7 (use M4): ami-4bf3d731.
+    Type: String
+    Default: AlwaysUseLatest
+  1OSInstanceOSPlatform:
+    Description: >
+      Enter "Linux" or "Windows".  AMI specified in 9AWSRetrieveLatestAWSOSAmiIdFromSSM or 1OSPeggedAMIID must contain this platform choice.
+    Type: String
+    Default: Linux
+    AllowedValues:
+      - Linux
+      - Windows
+  1OSInstanceLinuxArch:
+    Description: >
+      amd64 and arm64 are selectable for Linux OS only. You must ensure your selected AMI (or AMI lookup parameter) matches the selected architecture.
+    Type: String
+    Default: amd64
+    AllowedValues:
+      - amd64
+      - arm64
+  1OSLastManagedUpdate:
+    Description: >
+      Enter update date - changing this is required to force a rolling replacement for patching.
+      It has a secondary purpose as a convenient way to document the patch date as an environment variable and an EC2 tag.
+      It is just a string that you could set to any value and has no role in selecting patches or anything else - but it
+      does need to change from it's previous setting in order for the update to be forced.
+    Type: String
+    Default: 2021-01-28
+  1OSPatchScope:
+    Description: >
+      What types of patches to apply. "NoPatching" - No patching will be done - this setting is for debugging only (patch dates will still be set)
+      This can be changed on an update if you setup an ASG and realize you would like to keep it.
+    Type: String
+    Default: NoPatching
+    AllowedValues:
+      - All
+      - SecurityOnly
+      - NoPatching
+  3INSTConfigurationScript:
+    Description: >
+      Allows additional script commands during startup. This is parameterized for testing new versions and to enable one
+      CloudFormation template codebase to be used for many different Autoscaling groups. It also allows you to use this template
+      without customizing it so that you can take future updates without headache. Windows 2012 and earlier also have a userdata size
+      limit of 16Kb - this method gets around that.
+      1) "Embedded" uses the code right in this template and does not use external files at all.
+      2) Enter a URL starting with s3://, http:// or https:// to dynamically source one during instance provisioning.
+      s3 allows easy private file storage.  http/s enables usage of git raw urls (whether public or private).
+      3) Enter a file pathname on the local instance. The file must be present in the location by the time Userdata processes
+      (e.g. via a custom AMI)
+      The instance must have a network route and permission to any remote locations.
+      The code you write must be idempotent so that it does the correct thing when run again after a patching reboot.
+      Runner examples provided in this project are: amazon-linux-2-shell.sh, amazon-linux-2-docker.sh, windows-shell.ps1 and windows-docker-windows.ps1 at
+      git raw url: https://gitlab.com/guided-explorations/aws/gitlab-runner-autoscaling-aws-asg/-/raw/v1.4.9-alpha14/runner_configs/
+    Type: String
+    Default: https://gitlab.com/guided-explorations/aws/gitlab-runner-autoscaling-aws-asg/-/raw/v1.4.9-alpha14/runner_configs/amazon-linux-2-docker.sh
+    #Reset above to: https://gitlab.com/guided-explorations/aws/gitlab-runner-autoscaling-aws-asg/-/raw/v1.4.9-alpha14/runner_configs/amazon-linux-2-docker.sh
+  3GITLABRunnerConcurrentJobs:
+    Description: >
+      How many desired concurrent jobs can this runner take at a time.
+      For external autoscaling on machine metrics like CPU or memory, this will need to be enough to cause the monitored utilization
+      threshold to be high enough to trigger scaling, rather than comfortably match the machine size.  Typically instances with the same
+      memory and cpu sizes should be choosen for the instances to maintain consistent performance across all ASG runner instances.
+    Type: Number
+    Default: 10
+  3GITLABRunnerInstanceURL:
+    Description: >
+      The url of the instance that the runner will register (must be reachable from runner instance on port 443 with return conversations).
+    Type: String
+    Default: https://gitlab.com/
+  3GITLABRunnerRegTokenList:
+    Description: One or more runner tokens to register (semicolon delimited) from the instance identified by the GitLab URL.
+    Type: String
+    NoEcho: true
+    AllowedPattern: .+
+  3GITLABRunnerS3CacheBucket:
+    Description: >
+      A bucket to which all instances will be given read and write permissions for a shared S3 Cache.
+      Values: "none" - do not create bucket or permissions.
+      "CreateOneForMe" - create a new, ASG unique bucket and permissions.
+      "SpecificName" - presumed to be a preexisting bucket to which read / write permissions are already present. Generally used
+      with a customer override IAM Instance Profile Role which must already have access to this bucket.
+    Type: String
+    Default: CreateOneForMe
+  3GITLABRunnerTagList:
+    Description: >
+      Optional tags to identify the runner (comma delimited) in GitLab and AWS Instance tags to identify things like what team or person the runner is for.
+      The runner will automatically have tags for the operating system platform, whether compute is spot or ondemand and the executor type.
+      Ec2 tags will also include the runner name and the gitlab instance url. Except for Linux Docker, other runner types will require tags to be specified in jobs.
+    Type: String
+  3GITLABRunnerVersion:
+    Description: >
+      Version of the GitLab Runner to install (defaults to latest).  Use the version numbers exactly as listed here: https://gitlab.com/gitlab-org/gitlab-runner/-/releases
+      For example: 'v13.7.0' or 'v13.8.0-rc1' (without quotes) You can actually see the version number in the download path of all the built packages.
+    Type: String
+    Default: latest
+  4ASGDesiredCapacity:
+    Description: >
+      This template uses ASGs for HA - even if you choose not to autoscale.
+      Desired capacity of 1 enables HOT/WARM through ASG Respawn.  Use this for applications where there CANNOT be more than one instance of this server/service role.
+      Desired capacity of 2 enables HOT/HOT since loss of a node does not require respawn for recovery, but the application must support more than one instance of this server/service role.
+      For testing, a desired capacity of 4 is a good number for testing rolling updates.
+      For testing all other functionality 1 is sufficient to observe how the userdata code processes to accomplish the yum update and reboot before the lifecycle hook.
+    Type: Number
+    Default: 1
+  4ASGUpdateType:
+    Description: (Only Applies To Updates) Whether ASG Update Should Do a Rolling Update or an ASG Replacement.
+    Type: String
+    Default: RollingThroughInstances
+    AllowedValues:
+      - ReplaceEntireASG
+      - RollingThroughInstances
+  4ASGUpdateMinInstancesInService:
+    Description: >
+      (Only Applies To Updates) Minimum number of instances that should be available during an update.
+      Consider about 75% of full capacity as a guideline.
+    Type: Number
+    Default: 1
+  4ASGUpdateMaxBatchSize:
+    Description: >
+      (Only Applies To Updates) Maximum number of instances to update at one time.
+      Consider about 25% of full capacity as a guideline.
+    Type: Number
+    Default: 2
+  4ASGScheduledShutdownCron:
+    Description: >
+      Cron format when ASG should scale to 0 for Min and Desired. to completely stop all instances. This is UTC, so adjust for your timezone.
+      You can set only a stop hour if something else is starting the ASG on demand, but this action will also scale it to the new parameters
+      regardless of the current settings due to autoscaling. You can manually edit this template to add more schedules.
+      For syntax guidelines see: https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html#CronExpressions
+      "0 19 * * MON-FRI" = Stop 7pm UTC, Monday-Friday. (Off during the UTC weekend)
+      "0 20 * * *" = Stop 8pm UTC everyday.
+    Type: String
+    Default: Disabled
+  4ASGScheduledStartupCron:
+    Description: >
+      Cron format when ASG should scale to 1 minimum to start ASG, autoscaling will take over after start. This is UTC, so adjust for your timezone.
+      You can set only a start hour if something else is stopping the ASG on demand, but this action will also scale it to the new parameters
+      regardless of the current settings due to autoscaling. You can manually edit this template to add more schedules.
+      For syntax guidelines see: https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html#CronExpressions
+      "0 7 * * MON-FRI" = Start 7am UTC, Monday-Friday.
+      "0 5 * * *" = Start 5am UTC everyday.
+    Type: String
+    Default: Disabled
+  4ASGScheduledStartupDesiredInstances:
+    Description: >
+      How many desired instances should be started upon scheduled start.  Min will be set 1.  If autoscaling is in use, it will adjust shortly after.
+      If autoscaling is not in use, this parameter dictates number of available instances when using schedules.
+      Not used if 4ASGScheduledStartupCron = Disabled.
+    Type: Number
+    Default: 1
+  4ASGSpecifyVPC:
+    Description: >
+      DefaultVPC - finds the VPC and by default configures all of its subnets for you (See 4ASGSpecifySubnets). Otherwise type in the VPC id of a VPC in the same region where you run the template. 
+      By default, all subnets and AZs of the chosen vpc will be used.
+      The VPC and chosen subnets must be setup in a way that allows the runner instances to resolve the DNS name and connect
+      to port 443 on the GitLab instance URL you provide.
+    Type: String
+    Default: DefaultVPC
+    #While it is tempting to make the above parameter of type "AWS::EC2::VPC::Id" this prevents automatic discovery and usage of the DefaultVPC.
+  4ASGSpecifySecurityGroups:
+    Description: >
+      DefaultSG - Use the default security group that belongs to the VPC specified in 4ASGSpecifyVPC.
+      Otherwise type in the security group ids (comma delimited) of the SGs that belong to the VPC specified in 4ASGSpecifyVPC.
+      Due to dynamic installations during scaling, runner instances must be able to access the internet when using AWS AMIs.
+      The default security group is not added to your list automatically - re-add it if you need it along with additional ones.
+    Type: String
+    Default: DefaultSG
+  4ASGSpecifySubnets:
+    Description: >
+      AllSubnets - finds and configures all of the specified VPC subnets for you. Otherwise type in the subnet ids (comma delimited) of
+      the subnets that belong to the VPC specified in 4ASGSpecifyVPC. The chosen subnets must be setup in a way that allows the runner
+      instances to resolve the DNS name and connect to port 443 on the GitLab instance URL you provide. This is how you select less than
+      all subnets and how you specify public or only private subnets if both exist in the target VPC.
+      Due to dynamic installations during scaling, runner instances must be able to access the internet when using AWS AMIs.
+    Type: String
+    Default: AllSubnets
+  5ASGAutoScalingEnabled:
+    Description: >
+      Setting to false still allows for High Availability - either HOT/Warm HA with 1 instance or HOT/HOT HA for 2 or more instances.
+      AWS resources for autoscaling are not created if this is false. The 'step scaling' policy is used.
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+  5ASGAutoScalingMaxSize:
+    Description: >
+      Maximum number of instances the ASG can contain.
+    Type: Number
+    Default: 505
+  5ASGSelfMonitorTerminationInterval:
+    Description: >
+      How often in minutes should the instance check if it is being asked to terminate so it can run a clean up script.
+      Terminations initiated by spot occur two minutes after notification, so this value should less than that for spot implementations.
+      AWS and instance resources for monitoring termination are not created if this value is not provided.
+      It is best practice to delete this if a termination hook truely is not needed for cleanup.
+    Type: String
+    Default: 1
+    AllowedValues: [0,1,2,3,4,5,Disabled]
+  5ASGAutoScalingMetricTypeToMonitor:
+    Description: >
+      Which utilization metric should scaling alarms key off.
+    Type: String
+    Default: CPU
+    AllowedValues: [CPU,Memory]
+  5ASGAutoScalingSetScaleOutUtilizationThreshold:
+    Description: >
+      What ASG-wide Utilization threshold triggers scaling up via step-scaling? Requires 5ASGAutoScalingEnabled=true.
+    Type: Number
+    Default: 0
+  5ASGAutoScalingSetScaleOutUtilizationThresholdSeconds:
+    Description: >
+      How many seconds does the threshold have to be in alarm to trigger scale up via step-scaling? Requires 5ASGAutoScalingEnabled=true.
+    Type: Number
+    Default: 0
+  5ASGAutoScalingSetScaleInUtilizationThreshold:
+    Description: >
+      What ASG-wide Utilization threshold triggers scaling down via step-scaling? Requires 5ASGAutoScalingEnabled=true.
+    Type: Number
+    Default: 0
+  5ASGAutoScalingSetScaleInUtilizationThresholdSeconds:
+    Description: >
+      How many seconds does the threshold have to be in alarm to trigger scale down? Requires 5ASGAutoScalingEnabled=true.
+    Type: Number
+    Default: 0
+  5ASGInstanceType1:
+    Description: >
+      ATTENTION: DISABLING SPOT *instance usage* is achieved by setting 5SPOTOnDemandPercentageAboveBaseCapacity to 100.
+      Specify the instance type to be used.  Do not use bursty instance types like t2 or t3. Four types required for spot configuration to avoid rebalancing churn. Selecting instances that all have the same size name will ensure similar costs.
+      More information: https://docs.aws.amazon.com/autoscaling/ec2/APIReference/API_InstancesDistribution.html
+    Type: String
+    Default: "m5.large"
+    AllowedPattern: ^[A-Za-z0-9.]+$
+    ConstraintDescription: At least one instancetype is required, use at least 2 to demonstrate spot.
+  5ASGInstanceType2:
+    Description: >
+      Specify the instance type to be used.  Do not use bursty instance types like t2 or t3. Four types required for
+      spot configuration to avoid rebalancing churn. Selecting instances that all have the same size name will ensure similar costs.
+      More information: https://docs.aws.amazon.com/autoscaling/ec2/APIReference/API_InstancesDistribution.html
+    Type: String
+  5ASGInstanceType3:
+    Description: >
+      Specify the instance type to be used.  Do not use bursty instance types like t2 or t3. Four types required for
+      spot configuration to avoid rebalancing churn. Selecting instances that all have the same size name will ensure similar costs.
+      More information: https://docs.aws.amazon.com/autoscaling/ec2/APIReference/API_InstancesDistribution.html
+    Type: String
+  5ASGInstanceType4:
+    Description: >
+      Specify the instance type to be used.  Do not use bursty instance types like t2 or t3. Four types required for
+      spot configuration to avoid rebalancing churn. Selecting instances that all have the same size name will ensure similar costs.
+      More information: https://docs.aws.amazon.com/autoscaling/ec2/APIReference/API_InstancesDistribution.html
+    Type: String
+  3INSTEbsVolumeSize:
+    Description: >
+      Specify the volume size of the EBS volume attached to the instance in GiB. Must be between 1 and 16384.
+    Type: Number
+    Default: 30
+  5SPOTSpotAllocationStrategy:
+    Description: >
+      Determines which allocation strategy to use. 'capacity-optimized' helps reduce spot terminations.
+      More information: https://docs.aws.amazon.com/autoscaling/ec2/APIReference/API_InstancesDistribution.html
+    Type: String
+    Default: capacity-optimized-prioritized
+    AllowedValues:
+      - lowest-price
+      - capacity-optimized
+      - capacity-optimized-prioritized
+  5SPOTOnDemandBaseCapacity:
+    Description: >
+      Sets a minimum number of always on on-demand (non-spot) base capacity.  The number of instances here will benefit from InstanceType
+      exhaustion, but not spot pricing. Set to 0 for a 100% spot cluster.
+    Type: Number
+    Default: 0
+  5SPOTOnDemandPercentageAboveBaseCapacity:
+    Description: >
+      The percent of the cluster instances that should be on-demand instances (with the remainder being spot). This parameter also used to control whether an ASG is 
+      completely spot (set to 0%) or completely on-demand (set to 100%). A completely on-demand ASG gives "instance type exhaustion protection" in AZs because 
+      the provided set of instance types is still used as a selection list when spinning up new instances. Specify your instance type list in the
+      parameters starting with "5ASGInstanceType"
+    Type: Number
+    Default: 100
+  8DBGKeypairName:
+    Description: Spins instances with a keypair to allow connection. It is easier and more secure to use SSM Session Manager which is automatically configured.
+    Type: String
+  9AWSSpecifiedIAMRoleNAME:
+    Description: >
+      Uses the specified IAM Role as the Instance Profile rather than building one. Must be the Role NAME (NOT THE ARN) which
+      allows abstracted reuse of the same name across multiple AWS accounts. 'CreateOneForMe' causes this template to create a role for you.
+      IMPORTANT: For scaling and lifecycle hooks to work, a prebuilt role must contain at least the permissions specified in this template in
+      the resource sections: ASGRebootRole, ASGSelfAccessPolicy and EC2SelfAccessPolicy.
+    Type: String
+    Default: CreateOneForMe
+  9AWSRetrieveLatestAWSOSAmiIdFromSSM:
+    Description: >
+      Get LATEST AMI Build by AWS as of Template run. Set to SSM parameter path. Only used if 1OSPeggedAMIID is set to 'latest'.
+      PARAMETER STORE PATHS HAVE MANY MORE OPTIONS FOR WINDOWS AND QUITE A FEW FOR AMAZON LINUX
+      COMMAND TO FIND WINDOWS OPTIONS (You are NOT restricted to ones that have docker preinstalled): aws ssm get-parameters-by-path --path '/aws/service/ami-windows-latest' --region us-east-1 | grep 'Server.*English.*Containers'
+      COMMON WINDOWS OPTIONS: /aws/service/ami-windows-latest/Windows_Server-2012-R2_RTM-English-64Bit-Base,
+      /aws/service/ami-windows-latest/Windows_Server-2012-R2_RTM-English-64Bit-Core,/aws/service/ami-windows-latest/Windows_Server-2016-English-Core-ContainersLatest,
+      /aws/service/ami-windows-latest/Windows_Server-2016-English-Full-ContainersLatest,/aws/service/ami-windows-latest/Windows_Server-2019-English-Core-ContainersLatest,
+      /aws/service/ami-windows-latest/Windows_Server-2019-English-Full-ContainersLatest,/aws/service/ami-windows-latest/Windows_Server-2019-English-Core-ContainersLatest
+      COMMON LINUX OPTIONS: /aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id (with docker), /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2 (no docker)
+      /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2 (ARM)
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+Conditions:
+  ReplaceEntireASG: !Equals [ !Ref 4ASGUpdateType, "ReplaceEntireASG" ]
+  InstancePlatformLinux: !Equals [ !Ref 1OSInstanceOSPlatform, "Linux" ]
+  UseLatestAMI: !Equals [ !Ref 1OSPeggedAMIID, "AlwaysUseLatest"]
+  BuildInstanceRoleToUse: !Equals [ !Ref 9AWSSpecifiedIAMRoleNAME, "CreateOneForMe" ]
+  ConfigureAutoscaling: !Equals [ !Ref 5ASGAutoScalingEnabled, "true" ]
+  Provided5ASGInstanceType1: !Not [ !Equals [ !Ref 5ASGInstanceType1, "" ]]
+  Provided5ASGInstanceType2: !Not [ !Equals [ !Ref 5ASGInstanceType2, "" ]]
+  Provided5ASGInstanceType3: !Not [ !Equals [ !Ref 5ASGInstanceType3, "" ]]
+  Provided5ASGInstanceType4: !Not [ !Equals [ !Ref 5ASGInstanceType4, "" ]]
+  UseKeypair: !Not [ !Equals [ !Ref 8DBGKeypairName, "" ]]
+  EnableSelfTerminationMonitoring: !Not [ !Equals [ !Ref 5ASGSelfMonitorTerminationInterval, "Disabled" ]]
+  CreateS3BucketAndPermissions: !Equals [ !Ref 3GITLABRunnerS3CacheBucket, "CreateOneForMe" ]
+  CreateStartSchedule: !Not [ !Equals [ !Ref 4ASGScheduledStartupCron, "Disabled" ]]
+  CreateStopSchedule: !Not [ !Equals [ !Ref 4ASGScheduledShutdownCron, "Disabled" ]]
+  UseCPUUtilizationMetric: !Equals [ !Ref 5ASGAutoScalingMetricTypeToMonitor, "CPU" ]
+  MemoryUtilizationMetric: !Equals [ !Ref 5ASGAutoScalingMetricTypeToMonitor, "Memory" ]
+
+Rules:
+  WindowsPlatformShouldNotUseDefaultSSMParameter:
+    RuleCondition: !Equals [ !Ref 1OSInstanceOSPlatform, "Windows" ]
+    Assertions:
+      - Assert: !Not [ !Equals [ !Ref 9AWSRetrieveLatestAWSOSAmiIdFromSSM, "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2" ]]
+        AssertDescription: "You have indicated the Windows platform in the parameter 1OSInstanceOSPlatform, but left the default Linux SSM Parameter path in 9AWSRetrieveLatestAWSOSAmiIdFromSSM"
+
+Resources:
+  #IAM Policies for Instance Profile:
+  ASGInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: BuildInstanceRoleToUse
+    Properties:
+      Path: /
+      Roles: [ !Ref ASGRebootRole ]
+
+  ASGSelfAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Allow instances to read their own ASG information for finding and signalling lifecycle hooks.
+      ManagedPolicyName: !Sub "${AWS::StackName}-ASGSelfAccessPolicy"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: ASGSelfAccessPolicy
+          Resource: "*"
+          Effect: Allow
+          Action:
+            - iam:ListAccountAliases
+            - autoscaling:DescribeAutoScalingInstances
+            - autoscaling:DescribeAutoScalingGroups
+            - autoscaling:DescribeLifecycle*
+        - Sid: ASGLifeCycleAccessPolicy
+          Resource: !Sub 'arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AWS::StackName}*'
+          Effect: Allow
+          Action:
+            - autoscaling:CompleteLifecycleAction
+            - autoscaling:RecordLifecycleActionHeartbeat
+        #This permission allows Runner jobs to use the aws cli to take scaling actions for the ASG of the runner for predictive or specific scaling
+        - Sid: AllowRunnerJobsToDoPredictiveScaling
+          Resource: !Sub 'arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AWS::StackName}*'
+          Effect: Allow
+          Action:
+            - autoscaling:UpdateAutoScalingGroup
+
+  EC2SelfAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Allow instances to read their own information - for detecting asg and spot membership.
+      ManagedPolicyName: !Sub "${AWS::StackName}-EC2SelfAccessPolicy"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: EC2SelfAccessPolicy
+          Resource: "*"
+          Effect: Allow
+          Action:
+            - ec2:DescribeInstances
+            - ec2:DescribeTags
+
+  ASGBucketPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Setting Amazon S3 bucket policy for ASG Instance Access for CodeDeploy and SSM.
+      ManagedPolicyName: !Sub "${AWS::StackName}-ASGBucketPolicy"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action:
+            - 's3:GetObject'
+            - 's3:GetObjectVersion'
+            - 's3:GetBucketVersioning'
+            - 's3:PutObject'
+            - 's3:DeleteObject' #needed for runner cache cleanup
+          Resource:
+            !If
+              - CreateS3BucketAndPermissions
+              -
+                - !Sub 'arn:${AWS::Partition}:s3:::${ASGBucket}'
+                - !Sub 'arn:${AWS::Partition}:s3:::${ASGBucket}/*'
+              -
+                - !Sub 'arn:${AWS::Partition}:s3:::${3GITLABRunnerS3CacheBucket}'
+                - !Sub 'arn:${AWS::Partition}:s3:::${3GITLABRunnerS3CacheBucket}/*'
+          Effect: Allow
+          Sid: WhitelistedGet
+
+  ASGRebootRole:
+    Type: AWS::IAM::Role
+    Condition: BuildInstanceRoleToUse
+    DependsOn:
+      - ASGSelfAccessPolicy
+      - EC2SelfAccessPolicy
+      - ASGBucketPolicy
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Action: sts:AssumeRole
+          Principal:
+            Service:
+              - ec2.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonSSMMaintenanceWindowRole
+        - arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - !Sub "arn:aws:iam::${AWS::AccountId}:policy/${AWS::StackName}-ASGSelfAccessPolicy"
+        - !Sub "arn:aws:iam::${AWS::AccountId}:policy/${AWS::StackName}-EC2SelfAccessPolicy"
+        - !Sub "arn:aws:iam::${AWS::AccountId}:policy/${AWS::StackName}-ASGBucketPolicy"
+
+  ASGBucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateS3BucketAndPermissions
+    Properties:
+      BucketName: !GetAtt S3BucketNameLower.OutputString
+      VersioningConfiguration:
+        Status: Suspended
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  InstanceASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    CreationPolicy:
+      AutoScalingCreationPolicy:
+        MinSuccessfulInstancesPercent: 75
+      ResourceSignal:
+        Timeout: !If [InstancePlatformLinux,PT45M,PT2H]
+        Count: !Ref 4ASGDesiredCapacity
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: !Ref 4ASGUpdateMaxBatchSize
+        MinInstancesInService: !Ref 4ASGUpdateMinInstancesInService
+        MinSuccessfulInstancesPercent: 75
+        WaitOnResourceSignals: true
+        PauseTime: PT0M30S
+        SuspendProcesses:
+          - HealthCheck
+          - ReplaceUnhealthy
+          - AZRebalance
+          - AlarmNotification
+          - ScheduledActions
+      AutoScalingReplacingUpdate:
+        # WillReplace=true will make ReplacingUpdate take precedent over RollingUpdate
+        WillReplace: !If [ReplaceEntireASG,true,false]
+    Properties:
+      HealthCheckGracePeriod: 3
+      MinSize: '1'
+      MaxSize: !Ref 5ASGAutoScalingMaxSize
+      DesiredCapacity: !Ref 4ASGDesiredCapacity
+      AvailabilityZones: !Split [",",!GetAtt LookupVPCInfo.OrderedZoneIdList]
+      VPCZoneIdentifier: !Split [",",!GetAtt LookupVPCInfo.OrderedSubnetIdList]
+      MixedInstancesPolicy:
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId:
+              Ref: ASGLaunchTemplate
+            Version: !GetAtt ASGLaunchTemplate.LatestVersionNumber
+          Overrides:
+            - !If
+              - Provided5ASGInstanceType1
+              - InstanceType: !Ref 5ASGInstanceType1
+              - !Ref "AWS::NoValue"
+            - !If
+              - Provided5ASGInstanceType2
+              - InstanceType: !Ref 5ASGInstanceType2
+              - !Ref "AWS::NoValue"
+            - !If
+              - Provided5ASGInstanceType3
+              - InstanceType: !Ref 5ASGInstanceType3
+              - !Ref "AWS::NoValue"
+            - !If
+              - Provided5ASGInstanceType4
+              - InstanceType: !Ref 5ASGInstanceType4
+              - !Ref "AWS::NoValue"
+        InstancesDistribution:
+          SpotAllocationStrategy: !Ref 5SPOTSpotAllocationStrategy
+          OnDemandAllocationStrategy: prioritized
+          OnDemandBaseCapacity: !Ref 5SPOTOnDemandBaseCapacity
+          OnDemandPercentageAboveBaseCapacity: !Ref 5SPOTOnDemandPercentageAboveBaseCapacity
+      LifecycleHookSpecificationList:
+      - LifecycleTransition: 'autoscaling:EC2_INSTANCE_LAUNCHING'
+        LifecycleHookName: instance-patching-reboot
+        HeartbeatTimeout: 3600
+      - !If
+        - EnableSelfTerminationMonitoring
+        -
+          LifecycleTransition: 'autoscaling:EC2_INSTANCE_TERMINATING'
+          LifecycleHookName: instance-terminating
+          HeartbeatTimeout: 3600
+        - !Ref "AWS::NoValue"
+
+      Tags:
+      - Key: Name
+        Value: !Ref AWS::StackName
+        PropagateAtLaunch: true
+      - Key: LAST_CF_PATCH_RUN
+        Value: !Ref 1OSLastManagedUpdate
+        PropagateAtLaunch: true
+
+  ScheduledActionDailyStart:
+    Condition: CreateStartSchedule
+    Type: AWS::AutoScaling::ScheduledAction
+    Properties:
+      AutoScalingGroupName:
+        Ref: InstanceASG
+      DesiredCapacity: !Ref 4ASGScheduledStartupDesiredInstances
+      MinSize: 1
+      Recurrence: !Ref 4ASGScheduledStartupCron
+
+  ScheduledActionDailyStop:
+    Condition: CreateStopSchedule
+    Type: AWS::AutoScaling::ScheduledAction
+    Properties:
+      AutoScalingGroupName:
+        Ref: InstanceASG
+      DesiredCapacity: 0
+      MinSize: 0
+      Recurrence: !Ref 4ASGScheduledShutdownCron
+
+  #Scaling policy and alarms are only created if autoscaling parameter is true
+  ScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Condition: ConfigureAutoscaling
+    DependsOn: InstanceASG
+    Properties:
+      AutoScalingGroupName:
+        Ref: InstanceASG
+      #Replace the below section if a different type of scaling policy is desired
+      PolicyType: StepScaling
+      AdjustmentType: 'ChangeInCapacity'
+      StepAdjustments:
+        - MetricIntervalUpperBound: 0
+          ScalingAdjustment: -1
+      MetricAggregationType: 'Average'
+      EstimatedInstanceWarmup: !If [InstancePlatformLinux,60,600]
+
+  ScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Condition: ConfigureAutoscaling
+    DependsOn: InstanceASG
+    Properties:
+      AutoScalingGroupName:
+        Ref: InstanceASG
+      PolicyType: StepScaling
+      AdjustmentType: 'ChangeInCapacity'
+      StepAdjustments:
+        - MetricIntervalLowerBound: 0
+          MetricIntervalUpperBound: 15
+          ScalingAdjustment: 1
+        - MetricIntervalLowerBound: 15
+          MetricIntervalUpperBound: 25
+          ScalingAdjustment: 2
+        - MetricIntervalLowerBound: 25
+          ScalingAdjustment: 3
+      MetricAggregationType: 'Average'
+      EstimatedInstanceWarmup: !If [InstancePlatformLinux,60,600]
+
+  LowUtilizationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: ConfigureAutoscaling
+    DependsOn: InstanceASG
+    Properties:
+      AlarmDescription: "Low Utilization alarm for : "
+      Namespace: !If [UseCPUUtilizationMetric,AWS/EC2,CWAgent]
+      MetricName: !If [UseCPUUtilizationMetric,CPUUtilization,!If [InstancePlatformLinux,mem_used_percent,"% Committed Bytes In Use"]]
+      Unit: Percent
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value:
+            Ref: InstanceASG
+      Statistic: Average
+      Period: !Ref 5ASGAutoScalingSetScaleInUtilizationThresholdSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref 5ASGAutoScalingSetScaleInUtilizationThreshold
+      ComparisonOperator: LessThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref ScaleDownPolicy
+
+  HighUtilizationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: ConfigureAutoscaling
+    DependsOn: InstanceASG
+    Properties:
+      AlarmDescription: "High Utilization alarm for : "
+      Namespace: !If [UseCPUUtilizationMetric,AWS/EC2,CWAgent]
+      MetricName: !If [UseCPUUtilizationMetric,CPUUtilization,!If [InstancePlatformLinux,mem_used_percent,"% Committed Bytes In Use"]]
+      Unit: Percent
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value:
+            Ref: InstanceASG
+      Statistic: Average
+      Period: !Ref 5ASGAutoScalingSetScaleOutUtilizationThresholdSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref 5ASGAutoScalingSetScaleOutUtilizationThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref ScaleUpPolicy
+
+  ASGLaunchTemplate:
+    Type: "AWS::EC2::LaunchTemplate"
+    Properties:
+      LaunchTemplateData:
+        ImageId:
+          !If
+            - UseLatestAMI
+            -
+                Ref: 9AWSRetrieveLatestAWSOSAmiIdFromSSM
+            -
+                Ref: 1OSPeggedAMIID
+        MetadataOptions:
+          HttpPutResponseHopLimit: 2
+          HttpTokens: required
+        #InstanceType is overridden by spot parameters
+        InstanceType: t2.micro
+        KeyName: !If [UseKeypair,!Ref 8DBGKeypairName,!Ref "AWS::NoValue"]
+        SecurityGroupIds: !Split [",",!GetAtt LookupVPCInfo.SgIdList]
+        IamInstanceProfile:
+          !If
+            - BuildInstanceRoleToUse
+            -   Arn: !GetAtt ASGInstanceProfile.Arn
+            -   Arn: !Sub "arn:aws:iam::${AWS::AccountId}:instance-profile/${9AWSSpecifiedIAMRoleNAME}"
+        BlockDeviceMappings:
+        - DeviceName: !If [InstancePlatformLinux,'/dev/xvda','/dev/sda1']
+          Ebs:
+            VolumeType: 'gp2'
+            VolumeSize: !Ref 3INSTEbsVolumeSize
+        Placement:
+          Tenancy: default
+        UserData:
+          !If
+            - InstancePlatformLinux
+            -
+              # **************
+              # Linux UserData
+              Fn::Base64: !Sub |
+                #!/bin/bash
+                #set -xv
+                ThisTemplateVersion="${1AAAATemplateVersion}"
+                function logit() {
+                  LOGSTRING="$(date +"%_b %e %H:%M:%S") $(hostname) USERDATA_SCRIPT: $1"
+                  echo "$LOGSTRING"
+                  #For CloudFormation, if you already collect /var/log/cloud-init-output.log or /var/log/messsages (non amazon linux), then you could mute the next logging line
+                  echo "$LOGSTRING" >> /var/log/messages
+                }
+                logit "Building Linux Instance... with AWS Elastic Scaling Runner Version: $ThisTemplateVersion"
+                logit "Learn more at: $1AAAReadmeBlogPost"
+                logit "Logs for this are found in /var/log/cloud-init-output.log or /var/log/messsages (non amazon linux)"
+                logit "Rendered script found in /var/lib/cloud/instance/scripts/part-001"
+                yum install -y jq unzip yum-utils amazon-linux-extras amazon-cloudwatch-agent
+
+                if ! ps -ef | grep -q '[a]mazon-ssm-agent'; then
+                  logit "SSM Agent is not installed, Installing SSM for Session Manager Access..."
+                  sudo yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_${1OSInstanceLinuxArch}/amazon-ssm-agent.rpm
+                  sudo start amazon-ssm-agent
+                fi
+
+                if [[ -z "$(command -v aws)" ]] ; then
+                  logit "AWS CLI is not present, installing it to control asg lifecycle hook completion..."
+                  if [[ -z "$(command -v pip)" ]] ; then
+                    if [[ "${1OSInstanceLinuxArch}" == "arm64" ]]; then
+                      curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
+                    else
+                      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                    fi
+                    unzip -q awscliv2.zip
+                    ./aws/install -i /usr/local/aws-cli -b /usr/bin
+                    rm -rf aws
+                  fi
+                  pip install awscli --upgrade
+                fi
+                if [[ ! -f /opt/aws/bin/cfn-signal ]] ; then
+                  logit "cfn-bootstrap is not present, installing it to control cloud formation completion..."
+                  yum install -y epel-release
+                  yum install -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm
+                  sudo ln -s /usr/local/lib/python2.7/site-packages/cfnbootstrap /usr/lib/python2.7/site-packages/cfnbootstrap
+                fi
+                IMDS_TOKEN="$(curl -X PUT http://169.254.169.254/latest/api/token -H X-aws-ec2-metadata-token-ttl-seconds:21600)"
+                AWS_REGION="$(curl -s -H X-aws-ec2-metadata-token:$IMDS_TOKEN 169.254.169.254/latest/meta-data/placement/availability-zone | sed 's/.$//')"
+                MYINSTANCEID="$(curl -H X-aws-ec2-metadata-token:$IMDS_TOKEN http://169.254.169.254/latest/meta-data/instance-id)"
+                NAMEOFASG=$(aws ec2 describe-tags --region $AWS_REGION --filters {"Name=resource-id,Values=$MYINSTANCEID","Name=key,Values=aws:autoscaling:groupName"} --output=text | cut -f5)
+                NAMEOFSTACK=${AWS::StackName}
+                REBOOTWASDONEFLAG=/root/finishuprebootwasdone.flg
+                if [ -f $REBOOTWASDONEFLAG ]; then
+                  logit "A finish up reboot was done, notifying success and exiting"
+                  if [ ! -z "$NAMEOFASG" ]; then
+                    logit "Completing lifecycle action hook so that ASG knows we are ready to be placed InService..."
+                    aws autoscaling complete-lifecycle-action --region $AWS_REGION --lifecycle-action-result CONTINUE --instance-id $MYINSTANCEID --lifecycle-hook-name instance-patching-reboot --auto-scaling-group-name $NAMEOFASG
+                  fi
+                  logit "Cfn-signaling success..."
+                  /opt/aws/bin/cfn-signal --success true --stack ${AWS::StackName} --resource InstanceASG --region $AWS_REGION
+                  exit 0
+                fi
+                OSInstanceLinuxArch="${1OSInstanceLinuxArch}"
+                GITLABRunnerS3CacheBucket="${3GITLABRunnerS3CacheBucket}"
+                if [ "${3GITLABRunnerS3CacheBucket}" == "CreateOneForMe" ]; then GITLABRunnerS3CacheBucket="${ASGBucket}"; fi
+                GITLABRunnerConcurrentJobs="${3GITLABRunnerConcurrentJobs}"
+                GITLABRunnerInstanceURL="${3GITLABRunnerInstanceURL}"
+                GITLABRunnerRegTokenList="${3GITLABRunnerRegTokenList}"
+                GITLABRunnerVersion="${3GITLABRunnerVersion}"
+                if [[ -n "${3GITLABRunnerTagList}" ]]; then GITLABRunnerTagList="${3GITLABRunnerTagList}"; fi
+                INSTANCEOSPLATFORM="${1OSInstanceOSPlatform}"
+                RunnerOSTags="$(echo $INSTANCEOSPLATFORM | awk '{print tolower($0)}' )"
+                #RunnerConfigTomlTemplate #(Embedded, local or s3:// or http*://)
+                #RunnerInstallRoot='/usr/local/bin'
+                RunnerInstallRoot='/gitlab-runner'
+                RunnerConfigToml="/etc/gitlab-runner/config.toml"
+                ASGSelfMonitorTerminationInterval="${5ASGSelfMonitorTerminationInterval}"
+
+                if [[ "${4ASGScheduledStartupCron}" != "Disabled" ]] || [[ "${4ASGScheduledShutdownCron}" != "Disabled" ]]; then GITLABRunnerTagList="$GITLABRunnerTagList, UsesAWSASGScheduledAvailability"; fi
+
+                LAST_CF_PATCH_RUN="${1OSLastManagedUpdate}" #Forces change for patching rolling replacement and documents last CF triggered patching
+                ACTUAL_PATCH_DATE=$(date +%Y-%m-%d)
+                PATCHDONEFLAG=/root/patchingisdone.flg
+                logit "Processing userdata script on instance: $MYINSTANCEID"
+                logit "Operating in Region: $AWS_REGION, launched from ASG: $NAMEOFASG"
+                yum update yum-utils yum-plugin-security
+                uname -r
+                COMPUTETYPE="PROBLEM FINDING SPOT STATUS"
+                if [[ "$(aws ec2 describe-instances --filters Name=instance-id,Values="$MYINSTANCEID" --region $AWS_REGION | jq -r '.Reservations[].Instances[].SpotInstanceRequestId')" != "null" ]]; then
+                  COMPUTETYPE="SPOT"
+                else
+                  COMPUTETYPE="ONDEMAND"
+                fi
+                aws ec2 create-tags --resources $MYINSTANCEID --tags Key=COMPUTETYPE,Value=$COMPUTETYPE --region $AWS_REGION
+                if [ ! -z $NAMEOFASG ]; then
+                  logit "Instance is in an ASG, will process lifecycle hooks"
+                  logit "Listing hook to verify permissions and hook presence"
+                  aws autoscaling describe-lifecycle-hooks --region $AWS_REGION --auto-scaling-group-name $NAMEOFASG
+                else
+                  logit "Instance is not in an ASG or if it is, the instance profile used does not have permissions to its own tags."
+                fi
+
+                if [[ "${1OSPatchScope}" != "NoPatching" ]]; then
+                  if [ -f $PATCHDONEFLAG ]; then
+                    logit "Completed a post-patching reboot, skipping patching check..."
+                  else
+                    logit "Processing Patching Scope: ${1OSPatchScope}."
+                    if [[ "${1OSPatchScope}" == "All" ]]; then
+                      yum update -y
+                      touch $PATCHDONEFLAG
+
+                    elif [[ "${1OSPatchScope}" == "SecurityOnly" ]]; then
+                      yum --security update -y
+                      touch $PATCHDONEFLAG
+                    elif [[ "${1OSPatchScope}" == "NoPatching" ]]; then
+                      logit "No patching will be done - this setting is for debugging only (patch dates will still be set)"
+                    fi
+                    logit "Completed Patching Processing."
+                    logit "ACTUAL_PATCH_DATE may be newer because this instance was autoscaled after the LAST_CF_PATCH_RUN"
+                    logit "LAST_CF_PATCH_RUN: $LAST_CF_PATCH_RUN"
+                    echo "export LAST_CF_PATCH_RUN=$LAST_CF_PATCH_RUN" >> /etc/profile.d/lastpatchingdata.sh
+                    logit "ACTUAL_PATCH_DATE: $ACTUAL_PATCH_DATE"
+                    echo "export ACTUAL_PATCH_DATE=$ACTUAL_PATCH_DATE" >> /etc/profile.d/lastpatchingdata.sh
+                  fi
+                else
+                  logit "No patching will be done - this setting is for debugging only (patch dates will still be set)"
+                fi
+
+                logit "Continuing..."
+                if [ ! -z $NAMEOFASG ]; then
+                  logit "Sending a heart beat to reset the timeout counter while doing more things (just as an example)..."
+                  aws autoscaling record-lifecycle-action-heartbeat --region $AWS_REGION --instance-id $MYINSTANCEID --lifecycle-hook-name instance-patching-reboot --auto-scaling-group-name $NAMEOFASG
+                fi
+
+                #This approach for termination hook is much simpler than those involving SNS or CloudWatch, but when deployed
+                # on many instances it can result in a lot of ASG Describe API calls (which may be rate limited).
+                ASGSelfMonitorTerminationInterval=${5ASGSelfMonitorTerminationInterval}
+                if [ ! -z "$NAMEOFASG" ] && [ "$ASGSelfMonitorTerminationInterval" != "Disabled" ] && [ "$WaitingForReboot" != "true" ]; then
+                  logit "Setting up termination monitoring because 5ASGSelfMonitorTerminationInterval is set to $ASGSelfMonitorTerminationInterval"
+                  SCRIPTNAME=/etc/cron.d/MonitorTerminationHook.sh
+                  SCRIPTFOLDER=$(dirname $SCRIPTNAME)
+                  SCRIPTBASENAME=$(basename $SCRIPTNAME)
+
+                  #Heredoc script
+                  cat << EndOfScript > $SCRIPTNAME
+                    function logit() {
+                      LOGSTRING="\$(date +"%_b %e %H:%M:%S") \$(hostname) TERMINATIONMON_SCRIPT: \$1"
+                      echo "\$LOGSTRING"
+                      echo "\$LOGSTRING" >> /var/log/messages
+                    }
+                    #These are resolved at script creation time to reduce api calls when this script runs every minute on instances.
+
+                    if [[ "\$(aws autoscaling describe-auto-scaling-instances --instance-ids $MYINSTANCEID --region $AWS_REGION | jq --raw-output '.AutoScalingInstances[0] .LifecycleState')" == *"Terminating"* ]]; then
+                      logit "This instance ($MYINSTANCEID) is being terminated, perform cleanup..."
+
+                      #### PUT YOUR CLEANUP CODE HERE, DECIDE IF CLEANUP CODE SHOULD ERROR OUT OR SILENTLY FAIL (best effort cleanup)
+
+                      aws autoscaling complete-lifecycle-action --region $AWS_REGION --lifecycle-action-result CONTINUE --instance-id $MYINSTANCEID --lifecycle-hook-name instance-terminating --auto-scaling-group-name $NAMEOFASG
+                      logit "This instance ($MYINSTANCEID) is ready for termination"
+                      logit "Lifecycle CONTINUE was sent to termination hook in ASG: $NAMEOFASG for this instance ($MYINSTANCEID)."
+                    fi
+
+                EndOfScript
+
+                  logit "SCHEDULING: $SCRIPTNAME for every $ASGSelfMonitorTerminationInterval minutes to check for termination hook."
+
+                  chown root:root "$SCRIPTNAME"
+                  chmod 644 "$SCRIPTNAME"
+                  logit "Adding cron job"
+                  echo "*/$ASGSelfMonitorTerminationInterval * * * * root bash $SCRIPTNAME" | tee -a /etc/crontab > /dev/null
+                  logit "adding to /etc/crontab: */$ASGSelfMonitorTerminationInterval * * * * root bash $SCRIPTNAME"
+                  chown root:root /etc/crontab
+                  chmod 644 /etc/crontab
+                fi
+
+                DefaultLocalCachedConfigScript="custom_instance_configuration_script.sh"
+                logit "##########################################"
+                logit "RUNNING CUSTOM INSTANCE CONFIGURATION CODE"
+
+                #If indicated as embedded, run it.
+                if [[ "${3INSTConfigurationScript}" == "Embedded" ]]; then
+                  logit "CUSTOM CONFIG: Running embedded custom instance configuration script."
+                  #############################################
+                  # YOUR CODE HERE
+                  #############################################
+
+                elif [[ "${3INSTConfigurationScript}" == "http://"* || "${3INSTConfigurationScript}" == "https://"* ]]; then
+                  logit "CUSTOM CONFIG: Retrieving custom instance configuration script from ${3INSTConfigurationScript}"
+                  if [ ! -f $DefaultLocalCachedConfigScript ]; then
+                      logit "Pulling and executing from \"${3INSTConfigurationScript}\""
+                      if [ -n "$(command -v curl)" ]; then
+                          logit "found and using curl"
+                          curl -o $DefaultLocalCachedConfigScript -s ${3INSTConfigurationScript}
+                      elif [ -n "$(command -v wget)" ]; then
+                          logit "found and using wget"
+                          wget -O $DefaultLocalCachedConfigScript -s ${3INSTConfigurationScript}
+                      else
+                          logit "Could not find curl or wget, install one of these or manually copy \"${3INSTConfigurationScript}\""
+                      fi
+                  fi
+
+                elif [[ "${3INSTConfigurationScript}" == "s3://"* ]]; then
+                  logit "CUSTOM CONFIG: Retrieving custom instance configuration script from ${3INSTConfigurationScript}"
+                  if [ ! -f $DefaultLocalCachedConfigScript ]; then
+                      logit "Pulling and executing from \"${3INSTConfigurationScript}\""
+                      aws s3 cp ${3INSTConfigurationScript} $DefaultLocalCachedConfigScript
+                  fi
+                else
+                  logit "CUSTOM CONFIG: Running custom instance configuration script in the local file named ${3INSTConfigurationScript}"
+                  if [ -f $DefaultLocalCachedConfigScript ]; then
+                    logit "Pointing \$DefaultLocalCachedConfigScript to ${3INSTConfigurationScript}"
+                    DefaultLocalCachedConfigScript=${3INSTConfigurationScript}
+                  else
+                    logit "${3INSTConfigurationScript} was not found, will error out."
+                  fi
+                fi
+
+                if [ "${3INSTConfigurationScript}" != "Embedded" ]; then
+                  logit "Execution of the Non-Embedded Instance Configuration Script \"$DefaultLocalCachedConfigScript\" has been requested."
+                  if [ -f "$DefaultLocalCachedConfigScript" ]; then
+                    source "$DefaultLocalCachedConfigScript"
+                    EVALEXITCODE=$?
+                    if [ $EVALEXITCODE -gt 0 ]; then
+                      logit "ERROR: $EVALEXITCODE while calling $DefaultLocalCachedConfigScript"
+                      /opt/aws/bin/cfn-signal --success false --stack ${AWS::StackName} --resource InstanceASG --region $AWS_REGION
+                      exit $EVALEXITCODE
+                    fi
+                  else
+                    logit "ERROR: $DefaultLocalCachedConfigScript was not found, but is needed to complete instance setup."
+                    exit 9
+                  fi
+                fi
+
+                # END OF "RUNNING CUSTOM INSTANCE CONFIGURATION CODE"
+                # ###################################################
+
+                NEEDS_RESTART=0
+                needs-restarting -r || NEEDS_RESTART=$?
+                if [ $NEEDS_RESTART -gt 0 ]; then
+                  logit "Detected that a reboot is required, rebooting..."
+                  logit "Resetting userdata semaphore..."
+                  rm -f /var/lib/cloud/instances/*/sem/config_scripts_user || true
+                  rm -f /var/lib/cloud/instance/sem/config_scripts_user || true
+                  touch $REBOOTWASDONEFLAG
+                  reboot
+                  logit "Waiting for reboot to complete..."
+                  sleep 30
+                  WaitingForReboot=true
+                else
+                  if [ ! -z "$NAMEOFASG" ]; then
+                    logit "Completing lifecycle action hook so that ASG knows we are ready to be placed InService..."
+                    aws autoscaling complete-lifecycle-action --region $AWS_REGION --lifecycle-action-result CONTINUE --instance-id $MYINSTANCEID --lifecycle-hook-name instance-patching-reboot --auto-scaling-group-name $NAMEOFASG
+                  fi
+                logit "Cfn-signaling success..."
+                /opt/aws/bin/cfn-signal --success true --stack ${AWS::StackName} --resource InstanceASG --region $AWS_REGION
+                fi
+            -
+              # **************
+              # Windows UserData
+              Fn::Base64: !Sub |
+                <powershell>
+                $ThisTemplateVersion="${1AAAATemplateVersion}"
+                Function lc-success {aws autoscaling complete-lifecycle-action --region $AWS_REGION --lifecycle-action-result CONTINUE --instance-id $MYINSTANCEID --lifecycle-hook-name instance-patching-reboot --auto-scaling-group-name $NAMEOFASG}
+                Function cf-success {cfn-signal --success true --stack ${AWS::StackName} --resource InstanceASG --region $AWS_REGION}
+                Function logit ($Msg, $MsgType='Information', $ID='1') {
+                  If ($script:PSCommandPath -ne '' ) { $SourcePathName = $script:PSCommandPath ; $SourceName = split-path -leaf $SourcePathName } else { $SourceName = "Automation Code"; $SourcePathName = "Unknown" }
+                  Write-Host "[$(Get-date -format 'yyyy-MM-dd HH:mm:ss zzz')] $MsgType : From: $SourcePathName : $Msg"
+                  $applog = New-Object -TypeName System.Diagnostics.EventLog -argumentlist Application
+                  $applog.Source="$SourceName"
+                  $applog.WriteEntry("From: $SourcePathName : $Msg", $MsgType, $ID)
+                }
+                logit "Building Instance... with AWS Elastic Scaling Runner Version: $ThisTemplateVersion"
+                logit "Learn more at: $1AAAReadmeBlogPost"
+                logit "On 2012 R2 and earlier (Ec2Config) errors are logged to cat C:\Program Files\Amazon\Ec2ConfigService\Logs\Ec2ConfigLog.txt"
+                logit "On 2016 and later (Ec2Launch) errors are logged to cat C:\programdata\Amazon\EC2-Windows\Launch\Log\UserdataExecution.log"
+                logit "Rendered script on an instance will be found at: C:\Windows\TEMP\UserScript.ps1"
+
+                $REBOOTWASDONEFLAG="$env:PUBLIC/finishuprebootwasdone.flg"
+                If (![bool](get-process amazon-ssm-agent -ErrorAction SilentlyContinue)) {
+                  logit "SSM Agent is not present - Installing SSM for Session Manager Access..."
+                  Invoke-WebRequest https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/windows_amd64/AmazonSSMAgentSetup.exe -OutFile $env:PUBLIC\SSMAgent_latest.exe
+                  Start-Process	-wait -nonewwindow -FilePath $env:PUBLIC\SSMAgent_latest.exe -ArgumentList "/S"
+                }
+                If (![bool](get-command aws.exe -ea 0)) {
+                  logit "Installing AWS CLI to control lifecycle hook updates..."
+                  #$AWSCLIURL="https://s3.amazonaws.com/aws-cli/AWSCLI64PY3.msi" #v1
+                  $AWSCLIURL="https://awscli.amazonaws.com/AWSCLIV2.msi" #v2
+                  Invoke-WebRequest -UseBasicParsing -URI $AWSCLIURL -OutFile $env:PUBLIC\AWSCLI.msi
+                  do {
+                    $CycleMins = 1
+                    $msiExit = (Start-Process	 -wait -nonewwindow -FilePath "msiexec.exe" -ArgumentList "/i $env:PUBLIC\AWSCLI.msi /l*v $env:PUBLIC\AWSCLI-install.log /qn").ExitCode
+                    logit "MSI Exit: $msiExit"
+                    If ($msiExit -eq "1618") {
+                      logit "Got 1618 - MSIEXEC is processing another package - waiting $CycleMins Minute before trying again..."
+                      Start-Sleep -Seconds ($CycleMins * 60)
+                      $RetryMins += $CycleMins
+                    }
+                  } until (($msiExit -ne "1618") -or ($RetryMins -gt 5))
+
+                  #$env:PATH="$env:PATH;C:\Program Files\Amazon\AWSCLI\bin"
+                  $env:PATH="$env:PATH;C:\Program Files\Amazon\AWSCLIV2"
+                  If (![bool](get-command aws.exe -ea 0)) {
+                    throw "AWS CLI did not install correctly"
+                  }
+                }
+                If (![bool](get-command cfn-signal.exe -ea 0)) {
+                  logit "cfn-bootstrap is not present, installing it to control cloud formation completion..."
+                  Invoke-WebRequest https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-win64-latest.msi -OutFile $env:PUBLIC\aws-cfn-bootstrap-win64-latest.msi
+                  Start-Process	 -wait -nonewwindow -FilePath "msiexec.exe" -ArgumentList "/i $env:PUBLIC\aws-cfn-bootstrap-win64-latest.msi /l*v $env:PUBLIC\aws-cfn-bootstrap-win64-latest.log /qn"
+                }
+                Function Test-PendingReboot
+                {
+                  Return ([bool]((get-itemproperty "hklm:SYSTEM\CurrentControlSet\Control\Session Manager").RebootPending) -OR
+                  [bool]((get-itemproperty "HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update").RebootRequired) -OR
+                  [bool]((get-itemproperty "HKLM:SYSTEM\CurrentControlSet\Control\Session Manager").PendingFileRenameOperations) -OR
+                  ((test-path c:\windows\winsxs\pending.xml) -AND ([bool](get-content c:\windows\winsxs\pending.xml | Select-String 'postAction="reboot"'))) -OR
+                  ((get-itemproperty 'HKLM:SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName\' | Select-Object -Expand 'ComputerName') -ine (get-itemproperty 'HKLM:SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName\' | Select-Object -Expand 'ComputerName')) -OR
+                  ((Test-Path "HKLM:SYSTEM\CurrentControlSet\Services\Netlogon\JoinDomain") -OR (Test-Path "HKLM:SYSTEM\CurrentControlSet\Services\Netlogon\AvoidSpnSet")))
+                }
+                $IMDS_TOKEN="$(invoke-restmethod -method PUT -headers @{'X-aws-ec2-metadata-token-ttl-seconds'=21600} http://169.254.169.254/latest/api/token)"
+                $AWS_REGION="$($(invoke-restmethod -headers @{'X-aws-ec2-metadata-token'=$IMDS_TOKEN} 169.254.169.254/latest/meta-data/placement/availability-zone) -replace '.$')"
+                $MYINSTANCEID="$(invoke-restmethod -headers @{'X-aws-ec2-metadata-token'=$IMDS_TOKEN} http://169.254.169.254/latest/meta-data/instance-id)"
+                $NAMEOFASG=$(aws ec2 describe-tags --region $AWS_REGION --filters Name=resource-id,Values=$MYINSTANCEID Name=key,Values=aws:autoscaling:groupName | convertfrom-json).tags.value
+                $NAMEOFSTACK="${AWS::StackName}"
+                if (Test-Path $REBOOTWASDONEFLAG) {
+                  logit "A finish up reboot was done, notifying success and exiting"
+                  logit "Completing lifecycle action hook so that ASG knows we are ready to be placed InService..."
+                  lc-success
+                  logit "Cfn-signaling success..."
+                  cf-success
+                  exit 0
+                }
+                $GITLABRunnerS3CacheBucket="${3GITLABRunnerS3CacheBucket}"
+                If ( "${3GITLABRunnerS3CacheBucket}" -ieq "CreateOneForMe" ) { $GITLABRunnerS3CacheBucket="${ASGBucket}" }
+                $GITLABRunnerConcurrentJobs="${3GITLABRunnerConcurrentJobs}"
+                $GITLABRunnerInstanceURL="${3GITLABRunnerInstanceURL}"
+                $GITLABRunnerRegTokenList="${3GITLABRunnerRegTokenList}"
+                $GITLABRunnerVersion="${3GITLABRunnerVersion}"
+                $Tags="${3GITLABRunnerTagList}"
+                if ($Tags) { $GITLABRunnerTagList="${3GITLABRunnerTagList}" }
+                $INSTANCEOSPLATFORM="${1OSInstanceOSPlatform}"
+                $RunnerOSTags="$($INSTANCEOSPLATFORM.ToLower())"
+                $RunnerConfigTomlTemplate #(Embedded, local or s3:// or http*://)
+                $RunnerInstallRoot='C:\GitLab-Runner'
+                $RunnerConfigToml="$RunnerInstallRoot\config.toml"
+                $LAST_CF_PATCH_RUN="${1OSLastManagedUpdate}" #Forces change for patching rolling replacement and documents last CF triggered patching
+                $ACTUAL_PATCH_DATE="$(date -format 'yyyy-MM-dd')"
+                If (("${4ASGScheduledStartupCron}" -ine "Disabled") -OR ("${4ASGScheduledShutdownCron}" -ine "Disabled")) { $GITLABRunnerTagList = "$GITLABRunnerTagList, UsesAWSASGScheduledAvailability"}
+                $PATCHDONEFLAG="$env:PUBLIC/patchingisdone.flg"
+                $1OSPatchScopeToUse="${1OSPatchScope}"
+                logit "Processing userdata script on instance: $MYINSTANCEID"
+                logit "Operating in Region: $AWS_REGION, launched from ASG: $NAMEOFASG"
+                $COMPUTETYPE="PROBLEM FINDING SPOT STATUS"
+                if ( "$((aws ec2 describe-instances --region $AWS_REGION --instance-id $MYINSTANCEID | convertfrom-json).Reservations.Instances.SpotInstanceRequestId)" -ne "" ) {
+                  $COMPUTETYPE='SPOT'
+                } else {
+                  $COMPUTETYPE='ONDEMAND'
+                }
+                aws ec2 create-tags --region $AWS_REGION --resources $MYINSTANCEID --tags "Key=`"COMPUTETYPE`",Value=$COMPUTETYPE"
+                if ($NAMEOFASG) {
+                  logit "Instance is in an ASG, will process lifecycle hooks"
+                  logit "Listing hook to verify permissions and hook presence"
+                  aws --region $AWS_REGION autoscaling describe-lifecycle-hooks --auto-scaling-group-name $NAMEOFASG
+                } else {
+                  logit "Instance is not in an ASG or if it is, the instance profile used does not have permissions to its own tags."
+                }
+
+                if (!($1OSPatchScopeToUse -ieq "NoPatching")) {
+                  if (!(Test-Path $PATCHDONEFLAG)) {
+                    logit "Completed a post-patching reboot or patching skipped, skipping patching check..."
+                  } else {
+                    logit "Lets patch (including the kernel if necessary)..."
+                    logit "IMPORTANT: Windows update only updates installed os components.  If you install a component like IIS after this, you will need to run the patching commands again."
+
+                    if ((get-module -listavailable PSWindowsUpdate).count -lt 1) {
+                      Write-Host "PSWindowsUpdate is not available, installing..."
+                      install-module pswindowsupdate -SkipPublisherCheck -Force
+                    }
+
+                    Switch ($1OSPatchScopeToUse) {
+                      "SecurityOnly" { logit "Starting Patching."; Install-WindowsUpdate -MicrosoftUpdate -Category "Security Updates" -AcceptAll -Verbose; logit "Completed Patching."; New-Item -ItemType File -Path $PATCHDONEFLAG}
+                      "All" { logit "Starting Patching."; Install-WindowsUpdate -MicrosoftUpdate -AcceptAll -Verbose; logit "Completed Patching."; New-Item -ItemType File -Path $PATCHDONEFLAG }
+                      "NoPatching" {logit -MsgType 'Warning' -ID 4 -Msg "No patching will be done - this setting is for debugging only (patch dates will still be set)" }
+                    }
+
+                    $LatestNGENBinary = $(Get-ChildItem $env:windir\microsoft.net\framework64\v*\ngen.exe | sort-object | select-object -last 1 | select-object -expand FullName)
+
+                    If ($LatestNGENBinary) {
+                      logit "Running Native Assembly Generation to process .NET updates immediately. Most errors can be ignored."
+                      Start-Process $LatestNGENBinary -ArgumentList 'update' -nonewwindow -wait
+                      logit "Native Assembly Generation Complete. Most errors can be ignored."
+                    } else {
+                      logit -MsgType 'Warning' -ID 7 "Warning ngen.exe was not found, which means .NET may not be installed - a highly unusual situation."
+                    }
+
+                    logit "ACTUAL_PATCH_DATE may be newer because this instance was autoscaled after the LAST_CF_PATCH_RUN"
+                    logit "LAST_CF_PATCH_RUN: $LAST_CF_PATCH_RUN"
+                    set-content $env:public/lastpatchingdata.ps1 "$LAST_CF_PATCH_RUN=$LAST_CF_PATCH_RUN"
+                    logit "ACTUAL_PATCH_DATE: $ACTUAL_PATCH_DATE"
+                    add-content $env:public/lastpatchingdata.ps1 "$ACTUAL_PATCH_DATE=$ACTUAL_PATCH_DATE"
+                  }
+                } else {logit -MsgType 'Warning' -ID 4 -Msg "No patching will be done - this setting is for debugging only (patch dates will still be set)" }
+
+                #This approach for termination hook is much simpler than those involving SNS or CloudWatch, but when deployed
+                # on many instances it can result in a lot of ASG Describe API calls (which may be rate limited).
+                # variables identifying the instance and asg are hard coded into the script to reduce api calls.
+                $ASGSelfMonitorTerminationInterval=${5ASGSelfMonitorTerminationInterval}
+                if ($NAMEOFASG -AND ($ASGSelfMonitorTerminationInterval -ne "Disabled") -AND (!$WaitingForReboot -eq $True)) {
+                  logit "Setting up termination monitoring because 5ASGSelfMonitorTerminationInterval is set to $ASGSelfMonitorTerminationInterval"
+                  $SCRIPTNAME="$env:public\MonitorTerminationHook.ps1"
+
+                  #Heredoc script
+                  set-content $SCRIPTNAME -Value @"
+                    Function logit (`$Msg, `$MsgType='Information', `$ID='1') {
+                      If (`$script:PSCommandPath -ne '' ) { `$SourcePathName = `$script:PSCommandPath ; `$SourceName = split-path -leaf `$SourcePathName } else { `$SourceName = "Automation Code"; `$SourcePathName = "Unknown" }
+                      Write-Host "[`$(Get-date -format 'yyyy-MM-dd HH:mm:ss zzz')] `$MsgType : From: `$SourcePathName : `$Msg"
+                      `$applog = New-Object -TypeName System.Diagnostics.EventLog -argumentlist Application
+                      `$applog.Source="`$SourceName"
+                      `$applog.WriteEntry("From: `$SourcePathName : `$Msg", `$MsgType, `$ID)
+                    }
+
+                    if ( (aws autoscaling describe-auto-scaling-instances --instance-ids $MYINSTANCEID --region $AWS_REGION | convertfrom-json).AutoScalingInstances.LifecycleState -ilike "*Terminating*" ) {
+                      logit "This instance ($MYINSTANCEID) is being terminated, perform cleanup..."
+
+                      #### PUT YOUR CLEANUP CODE HERE, DECIDE IF CLEANUP CODE SHOULD ERROR OUT OR SILENTLY FAIL (best effort cleanup)
+
+                      aws autoscaling complete-lifecycle-action --region $AWS_REGION --lifecycle-action-result CONTINUE --instance-id $MYINSTANCEID --lifecycle-hook-name instance-terminating --auto-scaling-group-name $NAMEOFASG
+                      logit "This instance ($MYINSTANCEID) is ready for termination"
+                      logit "Lifecycle CONTINUE was sent to termination hook in ASG: $NAMEOFASG for this instance ($MYINSTANCEID)."
+                    }
+
+                "@
+
+                  logit "SCHEDULING: $SCRIPTNAME for every $ASGSelfMonitorTerminationInterval minutes to check for termination hook."
+                  schtasks.exe /create /sc MINUTE /MO $ASGSelfMonitorTerminationInterval /tn "MonitorTerminationHook.ps1" /ru SYSTEM /tr "powershell.exe -file $SCRIPTNAME"
+
+                }
+
+                $DefaultLocalCachedConfigScript="$env:public\custom_instance_configuration_script.ps1"
+                $INSTConfigurationScript="${3INSTConfigurationScript}"
+                logit "####"
+                logit "RUNNING CUSTOM INSTANCE CONFIGURATION CODE"
+
+                #If indicated as embedded, run it.
+                if ( $INSTConfigurationScript -eq "Embedded" ) {
+                  logit "CUSTOM CONFIG: Running embedded custom instance configuration script."
+                  ######
+                  # YOUR INSTANCE CONFIG CODE HERE
+
+                } elseif (($INSTConfigurationScript -ilike "http://*") -OR ($INSTConfigurationScript -ilike "https://*" )) {
+                  logit "CUSTOM CONFIG: Retrieving custom instance configuration script from $INSTConfigurationScript"
+                  if (!(Test-Path $DefaultLocalCachedConfigScript)) {
+                      logit "Pulling and executing from `"$INSTConfigurationScript`""
+                      [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12,[Net.SecurityProtocolType]::Tls11,[Net.SecurityProtocolType]::Tls; 
+                      Invoke-RestMethod -UseBasicParsing -OutFile $DefaultLocalCachedConfigScript -Uri $INSTConfigurationScript
+                    }
+                } elseif ( $INSTConfigurationScript -ilike "s3://*" ) {
+                  logit "CUSTOM CONFIG: Retrieving custom instance configuration script from $INSTConfigurationScript"
+                  if (!(Test-Path $DefaultLocalCachedConfigScript)) {
+                      aws s3 cp $INSTConfigurationScript $DefaultLocalCachedConfigScript
+                  } else {
+                    logit "$DefaultLocalCachedConfigScript was not found, will error out."
+                  }
+                } else {
+                  logit "CUSTOM CONFIG: Running custom instance configuration script in the local file named $INSTConfigurationScript"
+                  if (!(Test-Path $DefaultLocalCachedConfigScript)) {
+                    logit "Pointing \$DefaultLocalCachedConfigScript to $INSTConfigurationScript"
+                    DefaultLocalCachedConfigScript=$INSTConfigurationScript
+                  } else {
+                    logit "$DefaultLocalCachedConfigScript was not found, will error out."
+                  }
+                }
+
+                if ( $INSTConfigurationScript -ne "Embedded") {
+                  logit "Execution of the Non-Embedded Instance Configuration Script `"$DefaultLocalCachedConfigScript`" has been requested."
+                  if (Test-Path $DefaultLocalCachedConfigScript) {
+                    . "$DefaultLocalCachedConfigScript"
+                    $EVALEXITCODE=$LASTEXITCODE
+                    if ($EVALEXITCODE -gt 0) {
+                      logit "ERROR: $EVALEXITCODE while calling $DefaultLocalCachedConfigScript"
+                      cfn-signal --success false --stack ${AWS::StackName} --resource InstanceASG --region $AWS_REGION
+                      exit $EVALEXITCODE
+                    }
+                  } else {
+                    throw "ERROR: $DefaultLocalCachedConfigScript was not found, but is needed to complete instance setup."
+                    exit 9
+                  }
+                }
+                logit "Completed execution of custom configuration script, continuing..."
+
+                If (Test-PendingReboot)
+                  {
+                    logit "Reboot pending, shutting down in 10 seconds (giving time for orchestrating automation to close out)..."
+                    $WaitingForReboot=$True
+                    logit "Ensuring userdata will be processed again"
+                    $path = 'C:\Program Files\Amazon\Ec2ConfigService\Settings\config.xml'
+                    if (Test-Path $path) {
+                      logit "Reseting Ec2Config userdata"
+                      $xml = [xml](Get-Content $path)
+                      $state = $xml.Ec2ConfigurationSettings.Plugins.Plugin | where {$_.Name -eq 'Ec2HandleUserData'}
+                      $state.State = 'Disabled'
+                      $xml.Save($path)
+                    }
+                    if (Test-Path C:\ProgramData\Amazon\EC2-Windows\Launch\Scripts\InitializeInstance.ps1 ) {. C:\ProgramData\Amazon\EC2-Windows\Launch\Scripts\InitializeInstance.ps1 –Schedule}
+                    $path = 'C:\ProgramData\Amazon\Ec2-Windows\Launch\Config\LaunchConfig.json'
+                    if (Test-Path $path) {
+                      $ec2launchconfig = get-content $path | convertfrom-json
+                      if (!$($ec2launchconfig.handleUserData)) {
+                        logit "Reseting Ec2Launch userdata"
+                        $ec2launchconfig | add-member -membertype NoteProperty -Name 'handleUserData' -Value $True -Force
+                        $ec2launchconfig | convertto-json | set-content $path -Encoding UTF8 -
+                      }
+                      }
+                    New-Item -ItemType File -Path $REBOOTWASDONEFLAG
+                    shutdown.exe /r /t 10
+                  } Else {
+                    Write-Host "A reboot is not pending, no reboot action taken."
+                    if ($NAMEOFASG) {
+                      logit "Completing lifecycle action hook so that ASG knows we are ready to be placed InService..."
+                      lc-success
+                    }
+                    logit "Cfn-signaling success..."
+                    cf-success
+                  }
+                </powershell>
+
+  # Custom resource to transform input to lowercase.
+  LowerCasePlusRandomLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Description: Returns the lowercase version of a string
+      MemorySize: 256
+      Runtime: python3.8
+      Handler: index.handler
+      Role: !GetAtt CFCustomResourceLambdaRole.Arn
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import cfnresponse
+          import random
+          import string
+          import logging
+          import signal
+
+          LOGGER = logging.getLogger()
+          LOGGER.setLevel(logging.INFO)
+
+          def handler(event, context):
+              # Setup alarm for remaining runtime minus a second
+              signal.alarm((int(context.get_remaining_time_in_millis() / 1000)) - 1)
+              try:
+                  LOGGER.info('REQUEST RECEIVED:\n %s', event)
+                  LOGGER.info('REQUEST RECEIVED:\n %s', context)
+                  if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
+                      LOGGER.info(event['RequestType'])
+                      randstring = ''.join(random.SystemRandom().choice(string.ascii_lowercase + string.digits) for _ in range(5))
+                      output = event['ResourceProperties'].get('InputString', '').lower() + '-' + randstring
+                      responseData = {'OutputString': output}
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+                  elif event['RequestType'] == 'Delete':
+                      LOGGER.info('DELETE!')
+                      cfnresponse.send(event, context, "SUCCESS",
+                                    {"Message": "Resource deletion successful!"})
+              except: #pylint: disable=W0702
+                  LOGGER.info('FAILED!')
+                  cfnresponse.send(event, context, "FAILED", {
+                      "Message": "Exception during processing"})
+
+          def timeout_handler(_signal, _frame):
+              '''Handle SIGALRM'''
+              raise Exception('Time exceeded')
+
+          signal.signal(signal.SIGALRM, timeout_handler)
+
+  #Arguments: Vpc-id or "DefaultVPC"
+  #Returns: vpc-id, number of subnets and ordered list of subnetids and az ids.
+  # The index of these two return lists are correlated if it is desirable to choose less than the whole list.
+  VPCInfoLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Description: Returns VPC Information
+      MemorySize: 256
+      Runtime: python3.8
+      Handler: index.handler
+      Role: !GetAtt CFCustomResourceLambdaRole.Arn
+      Timeout: 240
+      Code:
+        ZipFile: |
+          import logging
+          import traceback
+          import signal
+          import cfnresponse
+          import boto3
+
+          LOGGER = logging.getLogger()
+          LOGGER.setLevel(logging.INFO)
+
+          def handler(event, context):
+              # Setup alarm for remaining runtime minus a second
+              signal.alarm((int(context.get_remaining_time_in_millis() / 1000)) - 1)
+              try:
+                  LOGGER.info('REQUEST RECEIVED:\n %s', event)
+                  LOGGER.info('REQUEST RECEIVED:\n %s', context)
+                  if event['RequestType'] == 'Delete':
+                      LOGGER.info('DELETE!')
+                      cfnresponse.send(event, context, "SUCCESS", {
+                           "Message": "Resource deletion successful!"})
+                      return
+                  elif event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
+                      LOGGER.info(event['RequestType'])
+                      request_properties = event.get('ResourceProperties', None)
+
+                      VpcToGet = event['ResourceProperties'].get('VpcToGet', '')
+                      ec2 = boto3.resource('ec2')
+                      VpcCheckedList = []
+                      TargetVPC = None
+                      vpclist = ec2.vpcs.all()
+                      for vpc in vpclist:
+                          VpcCheckedList.append(vpc.id)
+                          if VpcToGet == "DefaultVPC" and vpc.is_default == True:
+                              TargetVPC=vpc
+                          elif vpc.vpc_id == VpcToGet:
+                              TargetVPC=vpc
+
+                      if TargetVPC == None:
+                        raise Exception(f'VPC {VpcToGet} was not found among the ones in this account and region, VPC which are: {", ".join(VpcCheckedList)}')
+                      else:
+                        VPCOutput = TargetVPC.id
+                        subidlist = []
+                        zoneidlist = []
+                        subnets = list(TargetVPC.subnets.all())
+
+                        SubnetsToGet = event['ResourceProperties'].get('SubnetsToGet', '')
+                        subidfilterlist = []
+                        if SubnetsToGet != 'AllSubnets':
+                           subidfilterlist = [subid.strip() for subid in SubnetsToGet.split(',')]
+                           subnets = [subnet for subnet in subnets if subnet.id in subidfilterlist]
+                           if len(subnets) != len(subidfilterlist):
+                             raise Exception(f'Expected to find the {len(subidfilterlist)} provided subnets ({", ".join(subidfilterlist)}) in VPC {VpcToGet}, but found {len(subnets)} ({", ".join(subnets)})')
+
+                        for subnet in subnets:
+                          subidlist.append(subnet.id)
+                          zoneidlist.append(subnet.availability_zone)
+                        subidOutput = ",".join(subidlist)
+                        zoneidOutput = ",".join(zoneidlist)
+                        if not subnets:
+                          raise Exception(f'There are no subnets in VPC: {VpcToGet}, or the subnets provided {SubnetsToGet} do not belong to this VPC')
+                        LOGGER.info('subnet ids are: %s', subidOutput)
+                        LOGGER.info('zone ids are: %s', zoneidOutput)
+
+                        SgsToGet = event['ResourceProperties'].get('SgsToGet', '')
+                        sgs = list(TargetVPC.security_groups.all())
+                        if SgsToGet == 'DefaultSG':
+                          for sg in sgs:
+                            if sg.group_name == 'default':
+                              sgIds = [sg.id]
+                              break
+                        else:
+                          sgidfilterlist = [sgid.strip() for sgid in SgsToGet.split(',')]
+                          sgIds = [sg.id for sg in sgs if sg.id in sgidfilterlist]
+                          if len(sgIds) != len(sgidfilterlist):
+                            raise Exception(f'Expected to find the {len(sgidfilterlist)} provided security groups ({", ".join(sgidfilterlist)}) in VPC {VpcToGet}, but found {len(sgIds)} ({", ".join(sgIds)})')
+                        sgOutput = ",".join(sgIds)
+
+                      responseData = {}
+                      responseData['VPC_id'] = VPCOutput
+                      responseData['OrderedSubnetIdList'] = subidOutput
+                      responseData['OrderedZoneIdList'] = zoneidOutput
+                      responseData['SubnetCount'] = len(subidlist)
+                      responseData['SgIdList'] = sgOutput
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+
+              except Exception as err:
+                  AccountRegionInfo=f'Occured in Account {context.invoked_function_arn.split(":")[4]} in region {context.invoked_function_arn.split(":")[3]}'
+                  FinalMsg=str(err) + ' ' + AccountRegionInfo
+                  LOGGER.info('ERROR: %s', FinalMsg)
+                  LOGGER.info('TRACEBACK %s', traceback.print_tb(err.__traceback__))
+                  cfnresponse.send(event, context, "FAILED", {
+                      "Message": "{FinalMsg}"})
+
+          def timeout_handler(_signal, _frame):
+              '''Handle SIGALRM'''
+              raise Exception('Time exceeded')
+
+          signal.signal(signal.SIGALRM, timeout_handler)
+
+  CFCustomResourceLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: "lambda-write-logs"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "arn:aws:logs:*:*"
+        - PolicyName: "describe-vpcs-and-subnets"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "ec2:DescribeVpcs"
+                  - "ec2:DescribeSubnets"
+                  - "ec2:DescribeSecurityGroups"
+                Resource: "*"
+
+  LookupVPCInfo:
+    Type: Custom::VPCInfo
+    Properties:
+      ServiceToken: !GetAtt VPCInfoLambda.Arn
+      VpcToGet: !Ref 4ASGSpecifyVPC
+      SgsToGet: !Ref 4ASGSpecifySecurityGroups
+      SubnetsToGet: !Ref 4ASGSpecifySubnets
+
+  S3BucketNameLower:
+    Type: Custom::Lowercase
+    Properties:
+      ServiceToken: !GetAtt LowerCasePlusRandomLambda.Arn
+      InputString: !Sub "${AWS::StackName}"

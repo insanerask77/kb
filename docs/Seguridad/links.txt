@@ -1,0 +1,11 @@
+
+# Curso universidad salamanca
+https://c1b3rwallacademy.usal.es/
+# curso zap (pago)
+https://thehackerway.es/producto/zap-proxy-pack/
+# gitlab azure defender cloud
+https://github.com/Azure/Microsoft-Defender-for-Cloud/tree/main/Powershell%20scripts
+# gitlab TROUBLE 1
+https://github.com/TROUBLE-1
+#  Snort
+https://tryhackme.com/room/snort

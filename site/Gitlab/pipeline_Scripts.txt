@@ -1,0 +1,127 @@
+```yaml
+stages:
+
+  - test
+  - build
+  - package
+  - security
+  - deploy
+
+test:
+  stage: test
+  tags: 
+    - shell
+  before_script: 
+    - cd /home/ubuntu/mybts_fe/
+    - git fetch origin DT-54
+    - git checkout DT-54
+    - git pull
+    - docker info
+    - echo -n $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - echo $CI_REGISTRY_PASSWORD >> .env.development
+    - docker build -t $CI_REGISTRY_IMAGE:mybts_fe$CI_COMMIT_SHORT_SHA .
+    - docker stop $(docker ps -a -q)
+    - docker push $CI_REGISTRY_IMAGE:mybts_fe$CI_COMMIT_SHORT_SHA
+
+
+# - docker push gitlab.bluetrail.software:5050/mybts-platform/mybts_fe:$CI_COMMIT_SHORT_SHA
+```
+
+```yaml
+stages:
+  - build
+  - test
+  - docker-build
+  - deploy
+
+build:
+  stage: build
+  tags:
+    - dockerlocal  
+  image: node:16.14.0
+  # cache:
+  #   key: build-cache
+  #   paths:
+  #     - node_modules/
+  allow_failure: true
+  script: 
+    - echo "Start building App"
+    - npm ci --silent
+    # - npm install
+    - npm install react-scripts --silent@3.4.1 -g --silent
+    - cat $ENV_FE >> .env.production
+  after_script:
+    - npm run --silent build
+    - echo "Build successfully!"
+  artifacts:
+    expire_in: 5 minutes
+    paths:
+      - ./build
+#      - node_modules/
+  only:
+    refs:
+      - development
+  
+
+# test:
+#   stage: test
+#   image: node:16.14.0
+#   tags:
+#     - dockerlocal  
+#   script:
+#     - echo "Testing App"
+#     - CI=true npm test
+#     - echo "Test successfully!"
+#   only:
+#     refs:
+#       - development
+  
+
+docker-build:
+  stage: docker-build
+  image: docker:latest
+  tags:
+    - dockerlocal
+  services: 
+    - name: docker:dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+  script:
+    - docker build . --tag $CI_REGISTRY_IMAGE:mybts_fe$CI_COMMIT_SHORT_SHA
+    - docker push $CI_REGISTRY_IMAGE:mybts_fe$CI_COMMIT_SHORT_SHA
+    - echo "Registry image:" $CI_REGISTRY_IMAGE
+  only:
+    refs:
+      - development
+
+deploy:
+  stage: deploy
+  tags: 
+    - shell
+  before_script:
+    - docker stop $(docker ps -a -q)
+  script:
+   #cd  - docker run -dp 80:80 -v /tmp/certs:/tmp/certs $CI_REGISTRY_IMAGE:mybts_fe$CI_COMMIT_SHORT_SHA
+    - docker run -dp 80:80 -p 443:443 $CI_REGISTRY_IMAGE:mybts_fe$CI_COMMIT_SHORT_SHA
+   #- docker run -dp 80:80 -v /tmp/certs:/tmp/certs $CI_REGISTRY_IMAGE:mybts_fe$CI_COMMIT_SHORT_SHA
+  # after_script:
+  #   # - docker rmi -f $(docker images -f "dangling=true" -q)
+  #   - docker rmi -f $(docker images)
+  only:
+     refs:
+       - development
+
+# deploy:
+#   stage: deploy
+#   image: kroniak/ssh-client
+#   before_script:
+#     - echo "deploying app"
+#   script:
+#     - chmod 400 $SSH_PRIVATE_KEY
+#     - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY root@$PROD_SERVER_IP "docker pull registry.gitlab.com/alfredomartinezzz/budgefy"
+#     - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY root@$PROD_SERVER_IP "docker stop budgefycontainer || true && docker rm budgefycontainer || true"
+#     - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY root@$PROD_SERVER_IP "docker run -p 3001:80 -d --name budgefycontainer registry.gitlab.com/alfredomartinezzz/budgefy"
+
+```
+

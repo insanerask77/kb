@@ -1,0 +1,1 @@
+helm install mybts --create-namespace --namespace mybts-ns ../.

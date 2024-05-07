@@ -1,0 +1,386 @@
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  AUTO_DEVOPS_PLATFORM_TARGET: "EC2"
+
+stages:
+  - err0
+  - web
+  - build
+  - package
+  - junit-tests-without-uat-data
+  - deploy
+  - load-uat-data
+  - backup
+  - junit-tests-with-uat-data
+  - restore
+
+.add_ssh_key: &add_ssh_key
+  before_script:
+    ##
+    ## Install ssh-agent if not already installed, it is required by Docker.
+    ## (this version of instalation is for alpine)
+    ##
+    - "which ssh-agent || ( apk update && apk add --update openssh-client )"
+
+    ##
+    ## Run ssh-agent (inside the build environment)
+    ##
+    - eval $(ssh-agent -s)
+
+    ##
+    ## Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
+    ## We're using tr to fix line endings which makes ed25519 keys work
+    ## without extra base64 encoding.
+    ## https://gitlab.com/gitlab-examples/ssh-private-key/issues/1#note_48526556
+    ##
+    - echo "$DEV_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add - > /dev/null
+
+    ##
+    ## Create the SSH directory and give it the right permissions
+    ##
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+  after_script:
+    # remove ssh key
+    - ssh-add -d
+
+err0:
+  image: err0io/agent:latest
+  stage: err0
+  allow_failure: false
+  tags:
+    - docker
+  before_script:
+    - git fetch --all --tags
+  script: err0.sh --token tokens/err0-err0-io-err0server-e60fb9dd-5da5-11ec-a0b8-4622287bbd85.json --analyse --branch $CI_COMMIT_BRANCH --check .
+  only:
+    refs:
+      - develop
+      - master
+
+accmgt:
+  stage: web
+  image: node:16
+  allow_failure: false
+  tags:
+    - docker
+  script: (cd web/accmgt && (yarn install && ./build.sh))
+  artifacts:
+    paths:
+      - web/accmgt/build
+    expire_in: 1 week
+  only:
+    refs:
+      - develop
+      - master
+
+customer:
+  stage: web
+  image: node:16
+  allow_failure: false
+  tags:
+    - docker
+  script: (cd web/customer && (yarn install && ./build.sh))
+  artifacts:
+    paths:
+      - web/customer/build
+    expire_in: 1 week
+  only:
+    refs:
+      - develop
+      - master
+
+login:
+  stage: web
+  image: node:16
+  allow_failure: false
+  tags:
+    - docker
+  script: (cd web/login && (yarn install && ./build.sh))
+  artifacts:
+    paths:
+      - web/login/build
+    expire_in: 1 week
+  only:
+    refs:
+      - develop
+      - master
+
+build:
+  stage: build
+  image: openjdk:11-bullseye
+  tags:
+    - docker
+  script: ./gradlew --no-daemon -x test build
+  allow_failure: false
+  dependencies:
+    - accmgt
+    - customer
+    - login
+  artifacts:
+    paths:
+      - build/libs/err0server-*-fat.jar
+      - build/output/libs
+    expire_in: 1 week
+  only:
+    refs:
+      - develop
+      - master
+
+package-develop:
+  stage: package
+  image: docker:latest
+  services:
+    - docker:dind
+  tags:
+    - docker
+  before_script:
+    - docker info
+    - echo -n $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+    - cp build/output/libs/bcprov-*.jar docker/err0_app
+    - cp build/libs/err0server-*-fat.jar docker/err0_app
+    - cp ssl/keystore.jks docker/err0_app
+  script:
+    - docker build --no-cache corefabric/docker/cf_base --tag corefabric:cf_base
+    - docker build --no-cache corefabric/docker/cf_postgres --tag corefabric:cf_postgres
+    - docker build --no-cache docker/err0_postgres --tag err0_io:err0_postgres --tag $CI_REGISTRY_IMAGE:err0_db_$CI_COMMIT_SHA
+    - docker build --no-cache docker/err0_app --tag err0_io:err0_app --tag $CI_REGISTRY_IMAGE:err0_app_$CI_COMMIT_SHA --tag $CI_REGISTRY_IMAGE:err0_app_latest
+    - docker push $CI_REGISTRY_IMAGE:err0_db_$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE:err0_app_$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE:err0_app_latest
+  allow_failure: false
+  dependencies:
+    - build
+  only:
+    refs:
+      - develop
+
+package-master:
+  stage: package
+  image: docker:latest
+  services:
+    - docker:dind
+  tags:
+    - docker
+  before_script:
+    - docker info
+    - echo -n $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+    - cp build/output/libs/bcprov-*.jar docker/err0_prd
+    - cp build/libs/err0server-*-fat.jar docker/err0_prd
+    - cp ssl/keystore.jks docker/err0_prd
+  script:
+    - docker build --no-cache corefabric/docker/cf_base --tag corefabric:cf_base
+    - docker build --no-cache corefabric/docker/cf_postgres --tag corefabric:cf_postgres
+    - docker build --no-cache docker/err0_prd --tag err0_io:err0_prd --tag $CI_REGISTRY_IMAGE:err0_prd_$CI_COMMIT_SHA --tag $CI_REGISTRY_IMAGE:err0_prd_latest
+    - docker push $CI_REGISTRY_IMAGE:err0_prd_$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE:err0_prd_latest
+  allow_failure: false
+  dependencies:
+    - build
+  only:
+    refs:
+      - master
+
+deploy-master:
+  stage: deploy
+  dependencies:
+    - package-master
+  image: alpine
+  <<: *add_ssh_key
+  variables:
+    ## dont clone repo, instead it will work with the artifact
+    GIT_DEPTH: 1
+  tags:
+    - docker
+  script:
+    - |
+      ssh -o StrictHostKeyChecking=No $SSH_TARGET_PRD /bin/bash -s << EOT
+        set -e;
+        sudo docker stop err0_prd || true;
+        sudo docker rm err0_prd || true;
+        sudo docker system prune --all --force;
+        sudo docker volume prune --force;
+        sudo docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY;
+        sudo docker pull $CI_REGISTRY_IMAGE:err0_prd_$CI_COMMIT_SHA;
+        sudo docker run -d --name err0_prd --publish 443:8443 --publish 80:8080 $CI_REGISTRY_IMAGE:err0_prd_$CI_COMMIT_SHA
+      EOT
+  only:
+    refs:
+      - master
+
+# the project unit tests need the starter database schema and data.
+#
+junit-tests-without-uat-data:
+  stage: junit-tests-without-uat-data
+  image: openjdk:11-bullseye
+  services:
+    - name: $CI_REGISTRY_IMAGE:err0_db_$CI_COMMIT_SHA
+      alias: err0database
+  tags:
+    - docker
+  before_script:
+    - ln -s config.json.gitlab+docker config.json
+  script:
+    - ./gradlew -Djava.security.egd=file:/dev/urandom --no-daemon test --tests io.err0.test.without_uat_data.*
+  allow_failure: false
+  artifacts:
+    when: always
+    reports:
+      junit: build/test-results/test/**/TEST-*.xml
+  dependencies:
+    - accmgt
+    - customer
+    - login
+    - package-develop
+  only:
+    refs:
+      - develop
+
+deploy-develop:
+  stage: deploy
+  dependencies:
+    - junit-tests-without-uat-data
+  image: alpine
+  <<: *add_ssh_key
+  variables:
+    ## dont clone repo, instead it will work with the artifact
+    GIT_DEPTH: 1
+  tags:
+    - docker
+  script:
+    - |
+      ssh -o StrictHostKeyChecking=No $SSH_TARGET_DEV /bin/bash -s << EOT
+        set -e;
+        sudo docker stop err0_app || true;
+        sudo docker rm err0_app || true;
+        sudo docker system prune --all --force;
+        sudo docker volume prune --force;
+        sudo docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY;
+        sudo docker pull $CI_REGISTRY_IMAGE:err0_app_$CI_COMMIT_SHA;
+        sudo docker run -d --name err0_app --publish 8443:8443 --publish 8080:8080 --publish 127.0.0.1:54321:54321 $CI_REGISTRY_IMAGE:err0_app_$CI_COMMIT_SHA
+      EOT
+  only:
+    refs:
+      - develop
+
+# using the open-source-bundle project of open source subprojects, make some error
+# codes!
+#
+load-uat-data:
+  stage: load-uat-data
+  dependencies:
+    - deploy-develop
+  image: alpine
+  <<: *add_ssh_key
+  variables:
+    ## dont clone repo, instead it will work with the artifact
+    GIT_DEPTH: 0
+  tags:
+    - docker
+  script:
+    - |
+      ssh -o StrictHostKeyChecking=No $SSH_TARGET_DEV /bin/bash -s << EOT
+        set -e;
+        cd open-source-bundle;
+        perl versioning-test.pl && perl soak-test.pl
+      EOT
+  only:
+    refs:
+      - develop
+  when: delayed
+  start_in: 1 minutes
+
+backup:
+  stage: backup
+  dependencies:
+    - load-uat-data
+  image: alpine
+  <<: *add_ssh_key
+  variables:
+    ## dont clone repo, instead it will work with the artifact
+    GIT_DEPTH: 0
+    DUMP_FILE: err0db-localhost.pg_dump
+  tags:
+    - docker
+  script:
+    - |
+      ssh -o StrictHostKeyChecking=No $SSH_TARGET_DEV /bin/bash -s << EOT
+        set -e;
+        cd open-source-bundle;
+        rm -f ./$DUMP_FILE;
+        (PGPASSWORD=password /usr/pgsql-13/bin/pg_dump -Fc --file=./$DUMP_FILE --blobs --dbname=err0db --host=127.0.0.1 --port=54321 --username=postgres)
+      EOT
+    - scp -o StrictHostKeyChecking=No ${SSH_TARGET_DEV}:~/open-source-bundle/$DUMP_FILE ./
+    - |
+      ssh -o StrictHostKeyChecking=No $SSH_TARGET_DEV /bin/bash -s << EOT
+        set -e;
+        rm -f ./open-source-bundle/$DUMP_FILE;
+      EOT
+  artifacts:
+    paths:
+      - "$DUMP_FILE"
+    expire_in: 1 week
+  only:
+    refs:
+      - develop
+
+# the project unit tests need a full database restore from uat
+#
+junit-tests-with-uat-data:
+  stage: junit-tests-with-uat-data
+  image: openjdk:11-bullseye
+  services:
+    - name: $CI_REGISTRY_IMAGE:err0_db_$CI_COMMIT_SHA
+      alias: err0database
+  tags:
+    - docker
+  before_script:
+    - ln -s config.json.gitlab+docker config.json
+    - apt-get -y update && apt-get -y install postgresql-client
+  script:
+    - ./restore-gitlab.sh
+    - ./gradlew -Djava.security.egd=file:/dev/urandom --no-daemon test --tests io.err0.test.with_uat_data.*
+    - ./backup-gitlab.sh
+  allow_failure: false
+  artifacts:
+    when: always
+    paths:
+      - err0db-localhost.pg_dump
+    reports:
+      junit: build/test-results/test/**/TEST-*.xml
+    expire_in: 1 week
+  dependencies:
+    - accmgt
+    - customer
+    - login
+    - backup
+  only:
+    refs:
+      - develop
+
+restore:
+  stage: restore
+  dependencies:
+    - junit-tests-with-uat-data
+  image: alpine
+  <<: *add_ssh_key
+  variables:
+    ## dont clone repo, instead it will work with the artifact
+    GIT_DEPTH: 0
+    DUMP_FILE: err0db-localhost.pg_dump
+  tags:
+    - docker
+  script:
+    - scp -o StrictHostKeyChecking=No ./$DUMP_FILE ${SSH_TARGET_DEV}:~/open-source-bundle/
+    - |
+      ssh -o StrictHostKeyChecking=No $SSH_TARGET_DEV /bin/bash -s << EOT
+        set -e;
+        ./clear-database.sh;
+        cd open-source-bundle;
+        (PGPASSWORD=password /usr/pgsql-13/bin/pg_restore -Fc --dbname=err0db --host=127.0.0.1 --port=54321 --username=postgres ./$DUMP_FILE)
+      EOT
+  only:
+    refs:
+      - develop

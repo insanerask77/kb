@@ -1,0 +1,29 @@
+{{ $namespace :=  .Release.Namespace }}
+
+{{ $backend := printf "%s-%s" .Release.Name "back" | trunc 63 | trimSuffix "-" }}
+{{ $front := printf "%s-%s" .Release.Name "front" | trunc 63 | trimSuffix "-" }}
+{{ $postgres := printf "%s-%s" .Release.Name "postgresql" | trunc 63 | trimSuffix "-" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "global-config"
+  namespace: {{ $namespace }}
+data:
+    # PORTS
+    APP_PORT: {{ .Values.service.port | toString | quote }}
+    
+    # HOST
+    FRONT_HOST: "http://{{ $front }}"
+    DB_HOST: "{{ $postgres }}"
+    REACT_APP_PORT: "8080"
+    API_URL: "http://{{ $backend }}:{{ .Values.service.port | toString }}"
+    REDIRECT_URIS: '["http://mybts.bluetrail.software/api/V2/module0/login/redirect"]'
+    AUTH_URI: "https://accounts.google.com/o/oauth2/auth"
+    TOKEN_URI: "https://oauth2.googleapis.com/token"
+    AUTH_PROVIDER_X509_CERT_URL: "https://www.googleapis.com/oauth2/v3/certs"
+    REDIRECT_URIS: '["http://mybts.bluetrail.software/api/V2/module0/login/redirect"]'
+
+    REACT_APP_BACKEND: "http://{{ $front }}"
+    # Auth
+    DB_USER: postgres

@@ -1,0 +1,52 @@
+{{ $NAMESPACE :=  .Release.Namespace }}
+{{ $service_name := .Release.Name }}
+{{ $chart_name := .Chart.Name }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ include "back.fullname" . }}-cfg"
+  namespace: {{ $NAMESPACE }}
+data:
+    DB_HOST: "{{ $service_name }}-postgresql"
+    DB_USER: "postgres"
+    DB_PASSWORD: "postgres"
+    DB_NAME: "postgres"
+    DB_PORT: "5432"
+    DB_SCHEMA: "public"
+    TOKEN_SECRET: "secret"
+    TIME_DURATION: "24"
+    TIME_INTERVAL: "hours"
+    TIME_EXPIRATION: "24:00:00"
+    SECURITY_SALT: "10"
+    FRONT_HOST: "http://{{ $service_name }}-front"
+    MAX_ID_RANGE: "2147483647"
+    MAIL_SENDER: "no-reply@bluetrailsoft.com"
+    MAIL_HOST: "email-smtp.us-west-2.amazonaws.com"
+    MAIL_PORT: "465"
+    MAIL_USER: "AKIASGEYYWBBLW4MYDVS"
+    MAIL_PASS: "BC1SvTj5aig2JVD2g4YuZ94D2GSgmSna6A/hyPxXMmwo"
+    APP_PORT: "3000"
+    API_URL: "http://{{ $service_name }}-back:3000"
+    S3_BUCKET: "mybts-s3"
+    S3_FOLDER: "dev"
+    AWS_ACCESS_KEY_ID: "AKIAUETUB7XCT2UOJ4DL"
+    AWS_SECRET_ACCESS_KEY: "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"
+    AWS_REGION: "us-east-2"
+    S3_FOLDER_BACKUP: "platformBackups/dev_backups"
+    S3_PROJECT_FILES_FOLDER: "projectFiles"
+    V2_TIME_DURATION: "24"
+    V2_TIME_INTERVAL: "hours"
+    V2_TIME_EXPIRATION: "24:00:00"
+    WEATHER_API_KEY: "134e7fd1f8e8a5365e270b8ad776300b"
+    WEATHER_UPDATE_FREQUENCY: "1"
+    MANAGER_ID_ROLE: "1"
+    REDIRECT_URIS: '["http://mybts.bluetrail.software/api/V2/module0/login/redirect"]'
+    CLIENT_ID: "461536394247-4csspqfng903p10nm444i4qoiemjfp18.apps.googleusercontent.com"
+    PROJECT_ID: "BTS-Platform-2"
+    AUTH_URI: "https://accounts.google.com/o/oauth2/auth"
+    TOKEN_URI: "https://oauth2.googleapis.com/token"
+    AUTH_PROVIDER_X509_CERT_URL: "https://www.googleapis.com/oauth2/v3/certs"
+    CLIENT_SECRET: "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"
+    REDIRECT_URIS: '["http://mybts.bluetrail.software/api/V2/module0/login/redirect"]'
+    JAVASCRIPT_ORIGINS: '["http://localhost:4200","http://localhost","https://dev.platform.bluetrail.software","https://dev.platform.bluetrail.software:80","http://dev.platform.bluetrail.software","http://dev.platform.bluetrail.software:80","http://mybts-qa.bluetrail.software","https://mybts-qa.bluetrail.software",http://mybts.bluetrail.software]'
