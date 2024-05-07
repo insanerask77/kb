@@ -1,17 +1,3 @@
-# Welcome to MkDocs
+# Welcome to Insanerask KB
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
-
-## Commands
-
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
-
-## Project layout
-
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+¡**Bienvenido** a nuestra base de conocimiento cargada de energía y conocimientos emocionantes! :rocket:💡 Aquí encontrarás un universo de información listo para explorar y descubrir. Desde los conceptos más básicos hasta las ideas más innovadoras, ¡todo está aquí esperando ser descubierto por ti! 💪💫 ¡Prepárate para sumergirte en un viaje de aprendizaje emocionante y lleno de inspiración! 📚✨ ¡Bienvenido a bordo! 🎉🌟
