@@ -1,32 +1,70 @@
-site_name: Knowledge Base
+site_name: Material for MkDocs
+site_url: https://mkdocs-material.github.io/examples/
+site_author: Martin Donath
+site_description: >-
+  An ever-growing collection of self-contained example uses of Material for
+  MkDocs that you can download and run to get started quickly
+
+# Repository
+repo_name: mkdocs-material/examples
+repo_url: https://github.com/mkdocs-material/examples
+
+# Copyright
+copyright: Copyright &copy; 2016 - 2023 Martin Donath
+
+# Theme
 theme:
   name: material
-  palette:
+  features:
+    - content.action.edit
+    - content.action.view
+    - content.tooltips
+    - navigation.sections
+  icon:
+    logo: logo
 
-    # Palette toggle for automatic mode
-    - media: "(prefers-color-scheme)"
-      toggle:
-        icon: material/brightness-auto
-        name: Switch to light mode
-
-    # Palette toggle for light mode
-    - media: "(prefers-color-scheme: light)"
-      scheme: default 
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      toggle:
-        icon: material/brightness-4
-        name: Switch to system preference
+# Plugins
 plugins:
-- search
-#- mkdocstrings
+  - projects:
+      projects_dir: examples
+      projects_config_transform: !!python/name:examples.transform
+      log_level: info
 
+# Hooks
+hooks:
+  - hooks/archive.py
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
+# Customization
+extra:
+  analytics:
+    provider: google
+    property: !ENV GOOGLE_ANALYTICS_KEY
+
+# Extensions
 markdown_extensions:
   - admonition
-  - codehilite
-#  - mkautodoc
+  - attr_list
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.keys
+  - pymdownx.tabbed:
+      alternate_style: true
